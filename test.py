@@ -1,7 +1,6 @@
-from dotenv import load_dotenv
-import os
+# test_settings.py
 
-load_dotenv()
+from config.settings import settings
 
-print("Google Key:", os.getenv("GOOGLE_API_KEY"))
-print("LangSmith Project:", os.getenv("LANGSMITH_PROJECT"))
+print("Project:", settings.LANGSMITH_PROJECT)
+print("Google Key Loaded:", bool(settings.GOOGLE_API_KEY))

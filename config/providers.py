@@ -1,5 +1,5 @@
-# config/providers.py
-
 from config.settings import settings
 
-print(settings.GOOGLE_API_KEY)
+
+def get_google_api_key() -> str:
+    return settings.GOOGLE_API_KEY
