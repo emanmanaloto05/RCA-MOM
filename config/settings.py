@@ -1,7 +1,11 @@
-from dotenv import load_dotenv
+from pathlib import Path
 import os
 
-load_dotenv()
+from dotenv import load_dotenv
+
+env_path = Path(__file__).resolve().parent.parent / ".env"
+
+load_dotenv(dotenv_path=env_path)
 
 
 class Settings:
@@ -10,13 +14,9 @@ class Settings:
 
     PROJECT_VERSION = "1.0.0"
 
-    GEMINI_API_KEY = os.getenv(
-        "GEMINI_API_KEY"
-    )
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-    LANGSMITH_API_KEY = os.getenv(
-        "LANGSMITH_API_KEY"
-    )
+    LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
 
     LANGSMITH_PROJECT = os.getenv(
         "LANGSMITH_PROJECT",
