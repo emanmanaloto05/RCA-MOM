@@ -1,39 +1,38 @@
-from fastapi import APIRouter
+# routes.py
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from agent_root.models import RCAInputModel, RCAOutputModel
+from agent_root.service import RCAService, RCAServiceError
+from api.dependencies import verify_api_key
+from common.rate_limit import limiter
+
+logger = logging.getLogger("rca_generator.routes")
 
 router = APIRouter(
     prefix="/api",
-    tags=["RCA"]
+    tags=["RCA"],
+    dependencies=[Depends(verify_api_key)],
 )
 
 
 @router.post("/generate-rca", response_model=RCAOutputModel)
-def generate_rca(payload: RCAInputModel):
-    markdown_rca = f"""
-# Root Cause Analysis
+@limiter.limit("10/minute")  # type: ignore[misc]
+async def generate_rca(
+    request: Request,
+    payload: RCAInputModel,
+) -> RCAOutputModel:
+    issue_id = payload.task_monitoring_data.issue_logs_id
 
-## Issue ID
-{payload.task_monitoring_data.issue_logs_id}
+    logger.info("RCA generation request received | issue_id=%s", issue_id)
 
-## Issue
-{payload.task_monitoring_data.title}
+    try:
+        return await RCAService.generate_rca(payload)
 
-## Description
-{payload.task_monitoring_data.issue_description}
-
-## Precondition
-{payload.task_monitoring_data.pre_condition}
-
-## Expected Result
-{payload.task_monitoring_data.expected_result}
-
-## Initial RCA Status
-RCA input model is working. AI generation will be connected in Day 2.
-"""
-
-    return RCAOutputModel(
-        issue_id=payload.task_monitoring_data.issue_logs_id,
-        markdown_rca=markdown_rca,
-        pdf_file_path=None
-    )
+    except RCAServiceError as exc:
+        logger.exception("RCA generation failed | issue_id=%s", issue_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate RCA. Please check server logs.",
+        ) from exc

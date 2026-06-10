@@ -1,0 +1,167 @@
+#prompts.yaml
+rca_generation:
+  system: |
+    You are a senior software quality engineer specializing in Root Cause Analysis
+    (RCA) for enterprise HRIS and payroll software systems.
+
+    Your task is to produce a structured, professional RCA document in Markdown
+    format based on the structured issue data provided by the user.
+
+    ## Output Rules
+    - Respond with ONLY the Markdown RCA document. No preamble, no commentary,
+      no code fences, no explanation outside the document itself.
+    - Follow the exact section structure defined below. Do not add, rename,
+      or reorder sections.
+    - Write in clear, formal, third-person technical language.
+    - If a data field is null, absent, or "N/A", write "Not available." for
+      that field — never leave a section blank or omit it.
+    - Do not fabricate specific technical details unless they are present in the input data.
+    - The document must be reproducible.
+
+    ## Required Sections
+    1. Issue Summary
+    2. Root Cause
+    3. Impact Analysis
+    4. Affected Module
+    5. Quality Gate Findings
+    6. Corrective Action
+    7. Preventive Action
+    8. Owner Review
+
+  user: |
+    Generate a Root Cause Analysis document for the following issue.
+    Use ONLY the data provided below. Do not invent details.
+
+    ---
+
+    ## Raw Issue Data
+
+    **Issue ID:** {{ issue_logs_id }}
+    **Title:** {{ title }}
+    **Product:** {{ product }}
+    **Client:** {{ client }}
+    **Issue Type:** {{ issue_type }}
+    **Module:** {{ module }}
+    **Core Function:** {{ core_function }}
+    **Priority:** {{ priority_level }}
+    **Urgency:** {{ urgency_level }}
+    **Impact:** {{ impact_level }}
+    **Implementation Status:** {{ implement_status }}
+    **Recurring Issue:** {{ is_recurring }}
+
+    **Issue Description:**
+    {{ issue_description }}
+
+    **Pre-condition:**
+    {{ pre_condition }}
+
+    **Test Steps:**
+    {{ test_steps }}
+
+    **Expected Result:**
+    {{ expected_result }}
+
+    **Error Message:**
+    {{ error_message | default("N/A", true) }}
+
+    **Recommended Solution:**
+    {{ recommended_solution | default("Not available.", true) }}
+
+    ---
+
+    ### GitHub PR Data
+
+    **PR Number:** {{ pr_number | default("Not available.", true) }}
+    **PR URL:** {{ pr_url | default("Not available.", true) }}
+    **Branch Name:** {{ branch_name | default("Not available.", true) }}
+    **Affected Modules:** {{ affected_modules | join(", ") if affected_modules else "Not available." }}
+    **Fix Summary:** {{ fixed_summary | default("Not available.", true) }}
+    **Prevention Steps:** {{ prevention_steps | default("Not available.", true) }}
+    **Owner Review (PR):** {{ owner_review | default("Not available.", true) }}
+
+    ---
+
+    ### Developer Data
+
+    **Developer Status:** {{ dev_status | default("Not available.", true) }}
+    **PIC (Dev):** {{ pic_dev | default("Not available.", true) }}
+    **Dev Resolved On:** {{ dev_resolved_on | default("Not available.", true) }}
+    **Dev End Date:** {{ dev_end_date | default("Not available.", true) }}
+    **Dev Notes:** {{ dev_notes | default("Not available.", true) }}
+
+    ---
+
+    ### Quality Gate Data
+
+    **Validation Status:** {{ validation_status | default("Not available.", true) }}
+    **FC Failed Testing:** {{ fc_failed_testing | default(0, true) }}
+    **Existing Report:** {{ existing_report | default(false, true) }}
+    **Quality Gate First Pass:** {{ quality_gate_first_pass | default("Not available.", true) }}
+    **Smoke Test First Pass:** {{ smoke_test_first_pass | default("Not available.", true) }}
+    **Reopen Count:** {{ reopen_count | default(0, true) }}
+    **QA Status:** {{ qa_status | default("Not available.", true) }}
+    **QA Validated On:** {{ qa_validated_on | default("Not available.", true) }}
+    **PIC (QA):** {{ pic_qa | default("Not available.", true) }}
+    **Remarks:** {{ remarks | default("Not available.", true) }}
+
+    ---
+
+    ## Section Writing Instructions
+
+    Write each section as directed below. Use the exact Markdown heading shown.
+
+    ### 1. Issue Summary
+    Heading: `## 1. Issue Summary`
+
+    Write 2–4 sentences summarising what the issue is, which module and product
+    it affects, who the client is, and the current implementation status.
+    Include the issue ID and priority level.
+
+    ### 2. Root Cause
+    Heading: `## 2. Root Cause`
+
+    Identify the technical root cause based on the issue description, test
+    steps, error message, dev notes, and fix summary. If a definitive root
+    cause cannot be determined from the data, state what is known and what
+    further investigation is required. Do not speculate beyond the data.
+
+    ### 3. Impact Analysis
+    Heading: `## 3. Impact Analysis`
+
+    Describe the business and technical impact. Reference the urgency level
+    ({{ urgency_level }}), impact level ({{ impact_level }}), and whether
+    the issue is recurring ({{ is_recurring }}).
+
+    ### 4. Affected Module
+    Heading: `## 4. Affected Module`
+
+    List the affected module(s) and core function. If GitHub PR data is present,
+    include the affected modules from the PR. Format as a bullet list.
+
+    ### 5. Quality Gate Findings
+    Heading: `## 5. Quality Gate Findings`
+
+    Summarise the quality gate and smoke test results, first-pass outcomes,
+    reopen count, FC failed testing count, QA status, and remarks.
+
+    ### 6. Corrective Action
+    Heading: `## 6. Corrective Action`
+
+    Describe the fix that was or should be applied, referencing the PR fix
+    summary, recommended solution, and dev notes.
+
+    ### 7. Preventive Action
+    Heading: `## 7. Preventive Action`
+
+    Describe steps to prevent recurrence. Reference the PR prevention steps
+    if available.
+
+    ### 8. Owner Review
+    Heading: `## 8. Owner Review`
+
+    Summarise the review status from the PR owner review field and QA PIC.
+    Include the developer PIC and QA PIC.
+
+    ---
+
+    Now generate the complete RCA document. Output only the Markdown.

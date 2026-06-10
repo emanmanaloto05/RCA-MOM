@@ -1,6 +1,10 @@
-# test_settings.py
+# test_langsmith.py
 
-from config.settings import settings
+from langsmith import Client
 
-print("Project:", settings.LANGSMITH_PROJECT)
-print("Google Key Loaded:", bool(settings.GOOGLE_API_KEY))
+client = Client()
+
+projects = list(client.list_projects())
+
+print("Connected Successfully")
+print("Projects Found:", len(projects))
