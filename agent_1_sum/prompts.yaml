@@ -1,0 +1,47 @@
+summarize_prompt: |
+  Summarize the meeting transcript clearly and professionally.
+
+  Transcript:
+  {transcript}
+
+extract_owners_prompt: |
+  Extract all owners or persons responsible from the meeting transcript.
+
+  Transcript:
+  {transcript}
+
+extract_tasks_prompt: |
+  Extract all tasks, action items, deliverables, and assigned work.
+
+  Transcript:
+  {transcript}
+
+extract_blockers_prompt: |
+  Extract all blockers, issues, risks, or concerns discussed in the meeting.
+
+  Transcript:
+  {transcript}
+
+extract_followups_prompt: |
+  Extract all follow-ups, next steps, pending items, and target dates.
+
+  Transcript:
+  {transcript}
+
+generate_mom_prompt: |
+  Generate a professional Minutes of Meeting document using the details below.
+
+  Summary:
+  {summary}
+
+  Owners:
+  {owners}
+
+  Tasks:
+  {tasks}
+
+  Blockers:
+  {blockers}
+
+  Follow-ups:
+  {followups}
