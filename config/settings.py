@@ -10,6 +10,9 @@ load_dotenv(dotenv_path=env_path)
 
 class Settings:
 
+    API_KEY = os.getenv(
+    "API_KEY"
+)
     PROJECT_NAME = "RND MOM Generator"
 
     PROJECT_VERSION = "1.0.0"

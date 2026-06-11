@@ -3,7 +3,7 @@ from fastapi import Depends
 from fastapi import File
 from fastapi import UploadFile
 
-from api.dependencies import api_key_dependency
+from api.dependencies import verify_api_key
 
 router = APIRouter(
     prefix="/mom",
@@ -14,7 +14,7 @@ router = APIRouter(
 @router.post("/upload")
 async def upload_meeting_recording(
     file: UploadFile = File(...),
-    _: None = Depends(api_key_dependency)
+    api_key: str = Depends(verify_api_key)
 ):
     return {
         "message": "Meeting recording uploaded successfully",
