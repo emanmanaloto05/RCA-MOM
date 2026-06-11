@@ -1,3 +1,7 @@
+from datetime import datetime
+
+from jinja2 import Template
+
 from pathlib import Path
 
 import whisper
@@ -111,21 +115,64 @@ def analyze_meeting_node(state: MOMState):
 
 def generate_mom_node(state: MOMState):
     logger.info(
-        "Generating MOM document"
+        "Generating MOM HTML document"
     )
 
-    state["mom"] = f"""
-# Minutes of Meeting
+    template_path = Path(
+        "agent_1_sum/templates/mom_template.html"
+    )
 
-## Transcript File
-{state["transcript_path"]}
+    template_content = template_path.read_text(
+        encoding="utf-8"
+    )
 
-## Summary
-{state["summary"]}
+    template = Template(
+        template_content
+    )
 
-## Meeting Analysis
-{state["owners"]}
-"""
+    html_content = template.render(
+        company_name="Direc Business Technologies Inc.",
+        subject="Generated Meeting Notes",
+        date=datetime.now().strftime("%B %d, %Y"),
+        time=datetime.now().strftime("%I:%M %p"),
+        attendees="For Review",
+        agenda="Meeting Notes Summarization",
+        summary=state["summary"],
+        owners=state["owners"],
+        tasks=state["tasks"],
+        blockers=state["blockers"],
+        followups=state["followups"]
+    )
+
+    output_dir = Path(
+        "agent_1_sum/output/html"
+    )
+
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    file_name = (
+        f"MOM_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    )
+
+    html_path = output_dir / file_name
+
+    html_path.write_text(
+        html_content,
+        encoding="utf-8"
+    )
+
+    logger.info(
+        f"MOM HTML saved to: {html_path}"
+    )
+
+    state["html_path"] = str(
+        html_path
+    )
+
+    state["mom"] = html_content
 
     return state
 

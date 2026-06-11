@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Minutes of Meeting</title>
+
+    <style>
+        body {
+            font-family: "Times New Roman", serif;
+            font-size: 12px;
+            margin: 40px;
+            color: #000;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            font-size: 42px;
+            font-weight: bold;
+            font-style: italic;
+        }
+
+        .company-info {
+            text-align: right;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
+
+        td, th {
+            border: 1px solid #999;
+            padding: 8px;
+            vertical-align: top;
+        }
+
+        .label {
+            font-weight: bold;
+            width: 25%;
+        }
+
+        .green-header {
+            background-color: #d9f2d0;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .section-title {
+            font-weight: bold;
+        }
+
+        ul {
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="logo">direc</div>
+        <div class="company-info">
+            4F, Victoria One Bldg. 1670 Quezon Ave.<br>
+            South Triangle, Quezon City, Philippines<br>
+            www.direcbusiness.com<br>
+            (02) 8555 1547
+        </div>
+    </div>
+
+    <h1>Minutes of Meeting</h1>
+
+    <table>
+        <tr>
+            <td class="label">Company Name</td>
+            <td colspan="3">{{ company_name }}</td>
+        </tr>
+        <tr>
+            <td class="label">Subject</td>
+            <td colspan="3">{{ subject }}</td>
+        </tr>
+        <tr>
+            <td class="label">Date</td>
+            <td>{{ date }}</td>
+            <td class="label">Meeting Attendees</td>
+            <td>{{ attendees }}</td>
+        </tr>
+        <tr>
+            <td class="label">Time</td>
+            <td>{{ time }}</td>
+            <td class="label">Agenda / Objective</td>
+            <td>{{ agenda }}</td>
+        </tr>
+    </table>
+
+    <table>
+        <tr class="green-header">
+            <th>ITEM</th>
+            <th>ACTION</th>
+            <th>STATUS</th>
+            <th>PIC & TARGET DATE</th>
+        </tr>
+
+        <tr>
+            <td class="section-title">Discussion Points</td>
+            <td>{{ summary }}</td>
+            <td>Generated</td>
+            <td>AI Generated</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Owners</td>
+            <td>{{ owners }}</td>
+            <td>For Review</td>
+            <td>{{ owners }}</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Tasks</td>
+            <td>{{ tasks }}</td>
+            <td>For Review</td>
+            <td>To be assigned</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Blockers</td>
+            <td>{{ blockers }}</td>
+            <td>Pending</td>
+            <td>Concerned Team</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Follow-ups</td>
+            <td>{{ followups }}</td>
+            <td>Pending</td>
+            <td>Next Meeting</td>
+        </tr>
+    </table>
+
+</body>
+</html>
