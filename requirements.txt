@@ -1,10 +1,31 @@
+# FastAPI
 fastapi[standard]
+uvicorn
+
+# Validation & Config
 pydantic
 pydantic-settings
+python-dotenv
+
+# Rate Limiting
 slowapi
 limits
-python-dotenv
+
+# AI / LangChain
 langchain
 langchain-core
 langchain-google-genai
+langgraph
+
+# Prompt Templates
+jinja2
 pyyaml
+
+# Google Gemini
+google-generativeai
+
+# HTTP Client
+httpx
+
+# Optional Tracing
+langsmith

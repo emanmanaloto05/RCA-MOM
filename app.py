@@ -1,4 +1,7 @@
-#app.py
+# app.py
+
+from __future__ import annotations
+
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -17,17 +20,11 @@ from common.rate_limit import limiter
 from config.settings import settings
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=settings.log_level,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 
 logger = logging.getLogger("rca_generator")
-
-allowed_origins = [
-    origin.strip()
-    for origin in settings.allowed_origins.split(",")
-    if origin.strip()
-]
 
 app = FastAPI(
     title="RCA Generator API",
@@ -35,6 +32,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Rate limiting
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 
@@ -46,16 +44,23 @@ async def rate_limit_handler(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        content={"detail": "Rate limit exceeded. Please try again later."},
+        content={
+            "detail": "Rate limit exceeded. Please try again later."
+        },
     )
 
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["X-API-Key", "Content-Type"],
+    allow_headers=[
+        settings.api_key_header,
+        "Content-Type",
+        "Authorization",
+    ],
 )
 
 
@@ -78,7 +83,7 @@ async def request_logging_middleware(
         )
         raise
 
-    process_time = round(time.perf_counter() - start_time, 4)
+    duration = round(time.perf_counter() - start_time, 4)
     response.headers["X-Request-ID"] = request_id
 
     logger.info(
@@ -87,7 +92,7 @@ async def request_logging_middleware(
         request.method,
         request.url.path,
         response.status_code,
-        process_time,
+        duration,
     )
 
     return response
@@ -99,4 +104,6 @@ app.include_router(rca_router)
 
 @app.get("/", dependencies=[Depends(verify_api_key)])
 async def root() -> dict[str, str]:
-    return {"message": "RCA Generator API is running"}
+    return {
+        "message": "RCA Generator API is running"
+    }

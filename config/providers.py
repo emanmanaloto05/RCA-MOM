@@ -18,7 +18,6 @@ load_dotenv(override=False)
 
 logger = logging.getLogger("rca_generator.providers")
 
-
 # Enums
 class GeminiModel(str, Enum):
     FLASH_15 = "gemini-1.5-flash"
