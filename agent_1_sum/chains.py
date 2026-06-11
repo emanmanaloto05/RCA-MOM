@@ -2,13 +2,17 @@ from langchain_core.prompts import PromptTemplate
 
 from config.providers import llm
 
+
 def summarize_chain(
     transcript: str
 ):
     prompt = PromptTemplate(
         input_variables=["transcript"],
         template="""
-        Summarize the following meeting transcript.
+        Summarize the complete meeting transcript clearly and professionally.
+
+        Make sure no important decisions, concerns, tasks, or discussion points
+        are missed.
 
         Transcript:
         {transcript}
@@ -22,17 +26,32 @@ def summarize_chain(
             "transcript": transcript
         }
     )
-    
-def extract_owners_chain(
-    transcript: str
+
+
+def analyze_meeting_chain(
+    summary: str
 ):
     prompt = PromptTemplate(
-        input_variables=["transcript"],
+        input_variables=["summary"],
         template="""
-        Extract all owners and responsible persons.
+        Analyze the meeting summary below.
 
-        Transcript:
-        {transcript}
+        Extract the following sections only:
+
+        OWNERS:
+        - List all people responsible for tasks, decisions, or follow-ups.
+
+        TASKS:
+        - List all tasks, action items, deliverables, and mentioned work.
+
+        BLOCKERS:
+        - List all blockers, risks, concerns, issues, or pending problems.
+
+        FOLLOWUPS:
+        - List all follow-up actions, next steps, target dates, or pending items.
+
+        Meeting Summary:
+        {summary}
         """
     )
 
@@ -40,71 +59,6 @@ def extract_owners_chain(
 
     return chain.invoke(
         {
-            "transcript": transcript
-        }
-    )
-    
-def extract_tasks_chain(
-    transcript: str
-):
-    prompt = PromptTemplate(
-        input_variables=["transcript"],
-        template="""
-        Extract all action items and tasks.
-
-        Transcript:
-        {transcript}
-        """
-    )
-
-    chain = prompt | llm
-
-    return chain.invoke(
-        {
-            "transcript": transcript
-        }
-    )
-    
-def extract_blockers_chain(
-    transcript: str
-):
-    prompt = PromptTemplate(
-        input_variables=["transcript"],
-        template="""
-        Extract blockers, issues, risks,
-        and concerns.
-
-        Transcript:
-        {transcript}
-        """
-    )
-
-    chain = prompt | llm
-
-    return chain.invoke(
-        {
-            "transcript": transcript
-        }
-    )
-    
-def extract_followups_chain(
-    transcript: str
-):
-    prompt = PromptTemplate(
-        input_variables=["transcript"],
-        template="""
-        Extract follow-up actions
-        and next steps.
-
-        Transcript:
-        {transcript}
-        """
-    )
-
-    chain = prompt | llm
-
-    return chain.invoke(
-        {
-            "transcript": transcript
+            "summary": summary
         }
     )
