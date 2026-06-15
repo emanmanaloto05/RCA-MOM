@@ -1,5 +1,3 @@
-# app.py
-
 from __future__ import annotations
 
 import logging
@@ -10,6 +8,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from langsmith import Client
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -25,6 +24,13 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("rca_generator")
+
+try:
+    langsmith_client = Client()
+    logger.info("LangSmith client initialized successfully.")
+except Exception as exc:
+    langsmith_client = None
+    logger.warning("LangSmith client not initialized: %s", exc)
 
 app = FastAPI(
     title="RCA Generator API",

@@ -1,0 +1,481 @@
+/* ============================================================
+   RCA Document Stylesheet
+   Brand: direc Business Technologies Inc.
+
+   Page size  : A4  (210mm x 297mm)
+   Margins    : top 40mm (room for repeating header)
+                left 25.4mm | right 25.4mm | bottom 25.4mm
+
+   Colors:
+     Border Green  #37A533  rgb(55,165,51)   - table/card borders (1.3px)
+     Banner Green  #1E651C  rgb(30,101,28)   - RCA card header bg
+     Body text     #000000
+     Background    #ffffff
+   Fonts: Calibri, "Segoe UI", Arial, sans-serif
+
+   NOTE ON THE REPEATING HEADER
+   -----------------------------------------------------------
+   The header (logo + company details) is built with the CSS
+   "running element" mechanism (CSS GCPM), which is supported by
+   PDF renderers such as WeasyPrint / Prince. The header is taken
+   out of the normal document flow and placed into the page-margin
+   boxes (@top-left / @top-right) of EVERY page, so it repeats
+   automatically without being duplicated in the markup.
+
+   If your renderer does not support `position: running()` /
+   `element()` (e.g. plain Chrome "print to pdf"), the declarations
+   are simply ignored and the header will display once, in normal
+   flow, at the top of the document - it will not repeat. In that
+   case, switch to WeasyPrint or duplicate the header markup inside
+   each `.page` block.
+   ============================================================ */
+
+/* ============================================================
+   RESET
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+
+body {
+    /* Arial is the exact PDF font; Arimo is a metrically-compatible
+       open-source substitute for web rendering */
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;           /* all body text = 12pt */
+    font-weight: 400;
+    color: #000000;
+    background: #ffffff;
+    line-height: 1.72;         /* 20.7pt / 12pt ~= 1.725 */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* ============================================================
+   PAGE WRAPPER  (A4)
+   On screen this simulates the printed page (incl. margins).
+   On print, the real margins come from the @page rule below,
+   so the padding here is removed for print.
+   ============================================================ */
+
+.page {
+    width: 210mm;              /* A4 width */
+    min-height: 297mm;         /* A4 height */
+    margin: 0 auto;
+    /* Screen-only "fake" margins: top 40mm leaves room to preview
+       where the running header will sit when printed */
+    padding: 40mm 25.4mm 25.4mm 25.4mm;
+    background: #ffffff;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.10);
+}
+
+/* ============================================================
+   PRINT / PDF
+   ============================================================ */
+
+@media print {
+    @page {
+        size: A4;
+        /* Real page margins. Extra top margin gives the repeating
+           header (logo + company details) a place to render. */
+        margin: 40mm 25.4mm 25.4mm 25.4mm;
+
+        /* Repeating header pieces, placed in the top margin box
+           of every page (WeasyPrint / Prince) */
+        @top-left {
+            content: element(headerLogo);
+            vertical-align: top;
+        }
+        @top-right {
+            content: element(headerDetails);
+            vertical-align: top;
+        }
+    }
+
+    body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+    }
+
+    .page {
+        width: 100%;
+        min-height: 0;
+        margin: 0;
+        padding: 0;            /* real margins now come from @page */
+        box-shadow: none;
+    }
+
+    /* Pull header pieces out of normal flow -> rendered via @page
+       margin boxes on every page instead */
+    .page-header-logo {
+        position: running(headerLogo);
+    }
+    .page-header-details {
+        position: running(headerDetails);
+    }
+
+    /* Each issue section breaks onto a new page (except first) */
+    .section-divider {
+        page-break-before: always;
+    }
+
+    /* Keep footer pinned to the bottom of the last page's flow,
+       not floating mid-content if content is short */
+    .document-footer {
+        page-break-inside: avoid;
+    }
+}
+
+/* ============================================================
+   HEADER - logo left | address right
+   Rendered once in normal flow (screen) at the top of the page;
+   on print, both children are pulled into the repeating page
+   margin boxes (see @media print above).
+   ============================================================ */
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 11.75mm;    /* gap to title */
+}
+
+/* ── Logo ─────────────────────────────────────────────────── */
+
+.page-header-logo {
+    display: flex;
+    align-items: flex-start;
+    flex-shrink: 0;
+}
+
+.logo {
+    width: 150px;
+    height: auto;
+    display: block;
+}
+
+/* ── Address block - right ────────────────────────────────── */
+
+.page-header-details {
+    text-align: right;
+    font-size: 7.8pt;          /* small address text */
+    font-weight: 400;
+    color: #000000;
+    line-height: 1.6;
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.detail-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+
+.detail-icon svg {
+    width: 11px;
+    height: 11px;
+    fill: #37A533;
+}
+
+/* ============================================================
+   MAIN TITLE - "Root Cause Analysis (RCA)"
+   Arial Bold 14pt, centred
+   ============================================================ */
+
+.main-title {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 14pt;
+    font-weight: 700;
+    color: #000000;
+    text-align: center;
+    margin-bottom: 11.75mm;    /* gap to info table */
+    letter-spacing: 0;
+}
+
+/* ============================================================
+   INFO TABLE
+   Full-width | border: 1.3px solid #37A533 on all cells
+   Col 1: 52.6mm label | Col 2: remaining width value
+   Cell padding: 4pt top/bottom | 5.7pt left/right
+   ============================================================ */
+
+.info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 11.75mm;    /* gap before section heading */
+    font-size: 12pt;
+}
+
+.info-table tr {
+    border: 1.3px solid #37A533;
+}
+
+.info-table td {
+    padding: 4pt 5.7pt;        /* ~2mm left/right padding */
+    vertical-align: middle;
+    border: 1.3px solid #37A533;
+    font-size: 12pt;
+    color: #000000;
+    line-height: 1.72;
+}
+
+/* Label column - Bold, fixed width */
+.info-table td.label {
+    font-weight: 700;
+    width: 52.6mm;
+    white-space: nowrap;
+    background: #ffffff;
+}
+
+/* Value column */
+.info-table td.value {
+    font-weight: 400;
+    background: #ffffff;
+}
+
+/* Bold value (e.g. Company Name cell) */
+.info-table td.value.bold {
+    font-weight: 700;
+}
+
+/* ============================================================
+   ISSUE NUMBER HEADING  e.g. "Issue No. 1"
+   Arial Bold 12pt, hanging-indent numbering
+   ============================================================ */
+
+.issue-heading {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: 700;
+    color: #000000;
+    margin-top: 11.75mm;       /* gap after info table / previous card */
+    margin-bottom: 4pt;
+}
+
+/* ============================================================
+   ISSUE SUBHEADING - issue title beneath "Issue No. N"
+   ============================================================ */
+
+.issue-subheading {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: 400;
+    color: #000000;
+    margin-bottom: 8.5pt;      /* gap before RCA card */
+}
+
+/* ============================================================
+   RCA CARD TABLE
+   border: 1.3px solid #37A533 (outer) with internal row dividers
+   ============================================================ */
+
+.rca-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12pt;
+    /* Outer border is green */
+    border: 1.3px solid #37A533;
+}
+
+/* ── Dark green header banner ──────────────────────────────── */
+
+.rca-table thead tr {
+    background-color: #1E651C;
+}
+
+.rca-header-cell {
+    background-color: #1E651C;
+    color: #ffffff;
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 12pt;
+    text-align: center;
+    padding: 12px;
+    border: 1.3px solid #1E651C;
+    letter-spacing: 0;
+}
+
+/* ── Section label rows (ISSUE / CAUSE / SOLUTION ...) ───────── */
+
+.section-title {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #000000;
+    background-color: #ffffff;
+    padding: 7pt 5.7pt 5pt 5.7pt;
+    border: 1.3px solid #37A533;
+    border-top: 1.3px solid #37A533;
+    border-bottom: none;       /* merged visually with content cell below */
+}
+
+/* ── Content / body rows ────────────────────────────────────── */
+
+.section-content {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: 400;
+    color: #000000;
+    background-color: #ffffff;
+    padding: 4pt 5.7pt 8pt 5.7pt;
+    border: 1.3px solid #37A533;
+    border-top: none;          /* flows directly below section-title */
+    vertical-align: top;
+    line-height: 1.72;
+}
+
+/* ── Bullet lists inside content ──────────────────────────── */
+
+.rca-table ul {
+    margin: 0;
+    padding-left: 18pt;        /* 23.7pt indent - 5.7pt cell-padding */
+    list-style-type: disc;
+}
+
+.rca-table ul li {
+    margin-bottom: 0;
+    line-height: 1.72;
+}
+
+.rca-table ul li + li {
+    margin-top: 0;
+}
+
+/* ── Paragraphs inside content (cause, solution, owner review) */
+
+.section-content p {
+    margin: 0;
+    line-height: 1.72;
+}
+
+.section-content p + p {
+    margin-top: 6pt;
+}
+
+/* ============================================================
+   ATTACHMENTS SECTION
+   ============================================================ */
+
+.attachments-heading {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: 700;
+    color: #000000;
+    margin-top: 20pt;
+    margin-bottom: 10pt;
+}
+
+.attachment-wrapper {
+    margin-bottom: 14pt;
+    border: 1.3px solid #37A533;
+    overflow: hidden;
+}
+
+.attachment-img {
+    width: 100%;
+    display: block;
+}
+
+/* ============================================================
+   APPROVAL SIGN-OFF SECTION
+   Same green border / heading style as ATTACHMENTS, with a
+   two-column table (label | value) matching the info-table look.
+   ============================================================ */
+
+.approval-heading {
+    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: 700;
+    color: #000000;
+    margin-top: 20pt;
+    margin-bottom: 10pt;
+}
+
+.approval-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12pt;
+}
+
+.approval-table tr {
+    border: 1.3px solid #37A533;
+}
+
+.approval-table td {
+    padding: 4pt 5.7pt;
+    vertical-align: middle;
+    border: 1.3px solid #37A533;
+    font-size: 12pt;
+    color: #000000;
+    line-height: 1.72;
+}
+
+.approval-table td.approval-label {
+    font-weight: 700;
+    width: 52.6mm;
+    white-space: nowrap;
+    background: #ffffff;
+}
+
+.approval-table td.approval-value {
+    font-weight: 400;
+    background: #ffffff;
+}
+
+/* ============================================================
+   SECTION DIVIDER - separates multiple issues (page break on print)
+   ============================================================ */
+
+.section-divider {
+    margin: 0;
+    padding: 0;
+    border: none;
+    height: 0;
+}
+
+@media screen {
+    .section-divider {
+        border-top: 1.5px dashed #cccccc;
+        margin-top: 28pt;
+        margin-bottom: 0;
+        height: auto;
+    }
+}
+
+/* ============================================================
+   DOCUMENT FOOTER
+   Small, muted, centered metadata line at the end of the document.
+   ============================================================ */
+
+.document-footer {
+    margin-top: 24pt;
+    padding-top: 8pt;
+    border-top: 1px solid #cccccc;
+    font-size: 8.5pt;
+    color: #666666;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.document-footer div + div {
+    margin-top: 2pt;
+}

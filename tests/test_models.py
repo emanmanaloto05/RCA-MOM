@@ -27,10 +27,6 @@ from agent_root.models import (
 )
 
 
-# =============================================================================
-# TaskMonitoringData
-# =============================================================================
-
 class TestTaskMonitoringData:
     def test_valid_construction(self, task_data: TaskMonitoringData) -> None:
         assert task_data.issue_logs_id == "EIL_TEST001"
@@ -58,7 +54,10 @@ class TestTaskMonitoringData:
         assert td.title == "Title"
 
     def test_empty_issue_logs_id_raises(self) -> None:
-        with pytest.raises(ValidationError, match="min_length"):
+        with pytest.raises(
+            ValidationError,
+            match="String should have at least 1 character",
+        ):
             TaskMonitoringData(
                 issue_logs_id="",
                 title="T",
@@ -119,10 +118,6 @@ class TestTaskMonitoringData:
         assert td.error_message is None
 
 
-# =============================================================================
-# GitHubPRData
-# =============================================================================
-
 class TestGitHubPRData:
     def test_valid_github_pr(self, github_pr: GitHubPRData) -> None:
         assert github_pr.pr_number == 42
@@ -158,10 +153,6 @@ class TestGitHubPRData:
         assert pr.pr_url == "https://github.com/org/repo/pull/1"
 
 
-# =============================================================================
-# DeveloperIssueData
-# =============================================================================
-
 class TestDeveloperIssueData:
     def test_all_optional(self) -> None:
         dev = DeveloperIssueData()
@@ -179,10 +170,6 @@ class TestDeveloperIssueData:
         assert dev.dev_resolved_on == now
         assert dev.dev_end_date == now
 
-
-# =============================================================================
-# QualityGateData
-# =============================================================================
 
 class TestQualityGateData:
     def test_defaults(self) -> None:
@@ -206,10 +193,6 @@ class TestQualityGateData:
         assert quality_gate_data.pic_qa == "Maria Santos"
 
 
-# =============================================================================
-# RCAInputModel
-# =============================================================================
-
 class TestRCAInputModel:
     def test_full_model(self, rca_input: RCAInputModel) -> None:
         assert rca_input.task_monitoring_data.issue_logs_id == "EIL_TEST001"
@@ -227,10 +210,6 @@ class TestRCAInputModel:
             RCAInputModel()  # type: ignore[call-arg]
 
 
-# =============================================================================
-# RCAOutputModel
-# =============================================================================
-
 class TestRCAOutputModel:
     def test_valid_output(self, rca_output: RCAOutputModel) -> None:
         assert rca_output.issue_id == "EIL_TEST001"
@@ -244,17 +223,19 @@ class TestRCAOutputModel:
         assert out.pdf_file_path is None
 
     def test_empty_issue_id_raises(self) -> None:
-        with pytest.raises(ValidationError, match="min_length"):
+        with pytest.raises(
+            ValidationError,
+            match="String should have at least 1 character",
+        ):
             RCAOutputModel(issue_id="", markdown_rca="# RCA")
 
     def test_empty_markdown_raises(self) -> None:
-        with pytest.raises(ValidationError, match="min_length"):
+        with pytest.raises(
+            ValidationError,
+            match="String should have at least 1 character",
+        ):
             RCAOutputModel(issue_id="EIL_001", markdown_rca="")
 
-
-# =============================================================================
-# Enum completeness
-# =============================================================================
 
 class TestEnums:
     def test_issue_type_values(self) -> None:

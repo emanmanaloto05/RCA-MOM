@@ -98,10 +98,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
             f"Got: {type(raw).__name__}"
         )
 
-    # cast() tells Pylance the validated dict is dict[str, Any].
-    # yaml.safe_load() returns Any; after the isinstance guard above
-    # we know it is a dict, but Pylance cannot narrow Any to dict[str, Any]
-    # on its own — cast is required here and is not redundant.
     return cast(dict[str, Any], raw)
 
 
@@ -207,7 +203,10 @@ def reload_prompt_templates() -> None:
 # Flattens RCAInputModel into a flat dict[str, Any] for Jinja2 rendering.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_rca_template_context(rca_input: RCAInputModel) -> dict[str, Any]:
+def build_rca_template_context(
+    rca_input: RCAInputModel,
+    quality_summary: str = "",
+) -> dict[str, Any]:
     """
     Flattens the nested RCAInputModel into a single dict of Jinja2 template
     variables.
@@ -217,7 +216,11 @@ def build_rca_template_context(rca_input: RCAInputModel) -> dict[str, Any]:
     gracefully without raising UndefinedError.
 
     Args:
-        rca_input: Validated RCAInputModel instance.
+        rca_input:       Validated RCAInputModel instance.
+        quality_summary: Pre-computed quality gate summary string produced by
+                         the analyze_quality_gates graph node. Defaults to ""
+                         so direct callers (e.g. unit tests) that bypass the
+                         graph don't need to supply it.
 
     Returns:
         Flat dict[str, Any] ready to be unpacked into a Jinja2 template.
@@ -269,6 +272,16 @@ def build_rca_template_context(rca_input: RCAInputModel) -> dict[str, Any]:
             dev.dev_end_date.strftime("%Y-%m-%d %H:%M UTC")
             if (dev and dev.dev_end_date) else None
         ),
+
+        # Fact-locked developer evidence — REQUIRED by prompts.yaml for
+        # the "CONFIRMED FACTS" block and Sections 2/4/6/8. Previously
+        # missing here, causing the RCA generator to fall back to
+        # "Dev Notes" only and produce generic wording.
+        "affected_component":  dev.affected_component  if dev else None,
+        "root_cause":          dev.root_cause           if dev else None,
+        "fix_applied":         dev.fix_applied          if dev else None,
+        "verification_result": dev.verification_result if dev else None,
+
         "dev_notes": dev.dev_notes if dev else None,
 
         # ── QualityGateData (all optional) ───────────────────────────────
@@ -289,6 +302,17 @@ def build_rca_template_context(rca_input: RCAInputModel) -> dict[str, Any]:
         ),
         "pic_qa":  qg.pic_qa  if qg else None,
         "remarks": qg.remarks if qg else None,
+
+        # ── Quality gate summary (pre-computed by graph node) ─────────────
+        # Passed in as a parameter; defaults to "" for direct callers that
+        # bypass the LangGraph pipeline (e.g. unit tests).
+        "quality_summary": quality_summary,
+
+        # ── Attachments ───────────────────────────────────────────────────
+        # Always a list — empty list when no attachments are present.
+        # The Jinja2 template uses {% if attachments %} to conditionally
+        # render the attachments block, so an empty list is safe.
+        "attachments": rca_input.attachments,
     }
 
     return context
@@ -325,7 +349,10 @@ class RenderedPrompt:
 # PROMPT RENDERER
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_rca_prompt(rca_input: RCAInputModel) -> RenderedPrompt:
+def render_rca_prompt(
+    rca_input: RCAInputModel,
+    quality_summary: str = "",
+) -> RenderedPrompt:
     """
     Renders system and user prompt templates for a given RCAInputModel.
 
@@ -336,7 +363,11 @@ def render_rca_prompt(rca_input: RCAInputModel) -> RenderedPrompt:
            immediately on any missing variable.
 
     Args:
-        rca_input: Validated RCAInputModel instance.
+        rca_input:       Validated RCAInputModel instance.
+        quality_summary: Pre-computed quality gate summary string produced by
+                         the analyze_quality_gates graph node. Forwarded to
+                         build_rca_template_context. Defaults to "" so direct
+                         callers that bypass the graph don't need to supply it.
 
     Returns:
         RenderedPrompt with .system and .user string attributes.
@@ -346,7 +377,7 @@ def render_rca_prompt(rca_input: RCAInputModel) -> RenderedPrompt:
         PromptRenderError: If a template variable is missing or rendering fails.
     """
     templates = get_prompt_templates()
-    context   = build_rca_template_context(rca_input)
+    context   = build_rca_template_context(rca_input, quality_summary=quality_summary)
     env       = _make_jinja_env()
 
     try:
@@ -375,7 +406,10 @@ def render_rca_prompt(rca_input: RCAInputModel) -> RenderedPrompt:
 # LANGCHAIN CHATPROMPTTEMPLATE BUILDER
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_rca_chat_prompt(rca_input: RCAInputModel) -> ChatPromptTemplate:
+def build_rca_chat_prompt(
+    rca_input: RCAInputModel,
+    quality_summary: str = "",
+) -> ChatPromptTemplate:
     """
     Builds a LangChain ChatPromptTemplate from the rendered RCA prompts.
 
@@ -384,7 +418,11 @@ def build_rca_chat_prompt(rca_input: RCAInputModel) -> ChatPromptTemplate:
     Pass an empty dict ({}) when invoking the returned chain.
 
     Args:
-        rca_input: Validated RCAInputModel instance.
+        rca_input:       Validated RCAInputModel instance.
+        quality_summary: Pre-computed quality gate summary string produced by
+                         the analyze_quality_gates graph node. Forwarded to
+                         render_rca_prompt. Defaults to "" so direct callers
+                         that bypass the graph don't need to supply it.
 
     Returns:
         ChatPromptTemplate composed of:
@@ -404,12 +442,8 @@ def build_rca_chat_prompt(rca_input: RCAInputModel) -> ChatPromptTemplate:
         >>> chain  = prompt | llm
         >>> result = chain.invoke({})   # already fully rendered — pass empty dict
     """
-    rendered = render_rca_prompt(rca_input)
+    rendered = render_rca_prompt(rca_input, quality_summary=quality_summary)
 
-    # Pylance cannot fully resolve ChatPromptTemplate.from_messages() return
-    # type because langchain-core ships incomplete overload stubs. The explicit
-    # variable annotation below gives Pylance the concrete type it needs
-    # without suppressing the error or using a blanket type: ignore comment.
     prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(  # type: ignore[assignment]
         [
             SystemMessagePromptTemplate.from_template(rendered.system),

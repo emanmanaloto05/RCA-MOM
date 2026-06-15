@@ -1,4 +1,5 @@
-# models.py
+# agent_root/models.py
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
@@ -47,6 +48,13 @@ class PriorityLevel(str, Enum):
     P4_LOW = "P4 - Low"
 
 
+class ApprovalStatus(str, Enum):
+    DRAFT = "Draft"
+    FOR_REVIEW = "For Review"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
+
+
 class TaskMonitoringData(BaseModel):
     issue_logs_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
@@ -71,63 +79,24 @@ class TaskMonitoringData(BaseModel):
 
 
 class GitHubPRData(BaseModel):
-    """
-    Represents GitHub Pull Request data.
-
-    Fields sourced directly from the GitHub REST API (v2026-03-10):
-        - pr_number  → maps to `number` (integer) in GitHub PR response
-        - pr_url     → maps to `html_url` in GitHub PR response
-        - branch_name → maps to `head.ref` in GitHub PR response
-
-    Fields that are manually populated by developers / QA (NOT from GitHub API):
-        - affected_modules
-        - fixed_summary
-        - prevention_steps
-        - owner_review
-    """
-
-    # --- GitHub API-sourced fields ---
-    pr_number: Optional[int] = Field(
-        default=None,
-        description="GitHub PR number (integer). Maps to `number` in the GitHub REST API response.",
-        gt=0,
-    )
-    pr_url: Optional[str] = Field(
-        default=None,
-        description="Full URL to the PR on GitHub. Maps to `html_url` in the GitHub REST API response.",
-    )
-    branch_name: Optional[str] = Field(
-        default=None,
-        description="Source branch name. Maps to `head.ref` in the GitHub REST API response.",
-    )
-
-    # --- Manually populated enrichment fields ---
-    affected_modules: list[str] = Field(
-        default_factory=list,
-        description="List of modules affected by this PR. Manually populated by developer.",
-    )
-    fixed_summary: Optional[str] = Field(
-        default=None,
-        description="Summary of what was fixed. Manually populated by developer.",
-    )
-    prevention_steps: Optional[str] = Field(
-        default=None,
-        description="Steps to prevent recurrence. Manually populated by developer or QA.",
-    )
-    owner_review: Optional[str] = Field(
-        default=None,
-        description="Notes from the module owner's review. Manually populated.",
-    )
+    pr_number: Optional[int] = Field(default=None, gt=0)
+    pr_url: Optional[str] = None
+    branch_name: Optional[str] = None
+    affected_modules: list[str] = Field(default_factory=list)
+    fixed_summary: Optional[str] = None
+    prevention_steps: Optional[str] = None
+    owner_review: Optional[str] = None
 
     @field_validator("pr_url")
     @classmethod
-    def validate_pr_url(cls, v: Optional[str]) -> Optional[str]:
-        """Validate that pr_url is a well-formed GitHub URL if provided."""
-        if v is not None:
-            v = v.strip()
-            if not v.startswith("https://github.com/"):
-                raise ValueError("pr_url must be a valid GitHub URL starting with https://github.com/")
-        return v
+    def validate_pr_url(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            value = value.strip()
+            if not value.startswith("https://github.com/"):
+                raise ValueError(
+                    "pr_url must be a valid GitHub URL starting with https://github.com/"
+                )
+        return value
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -137,6 +106,10 @@ class DeveloperIssueData(BaseModel):
     pic_dev: Optional[str] = None
     dev_resolved_on: Optional[datetime] = None
     dev_end_date: Optional[datetime] = None
+    affected_component: Optional[str] = None
+    root_cause: Optional[str] = None
+    fix_applied: Optional[str] = None
+    verification_result: Optional[str] = None
     dev_notes: Optional[str] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -157,32 +130,51 @@ class QualityGateData(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class Attachment(BaseModel):
+    filename: str = Field(..., min_length=1)
+    file_path: str = Field(..., min_length=1)
+    content_type: Optional[str] = None
+    description: Optional[str] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class RCAApprovalData(BaseModel):
+    prepared_by: Optional[str] = None
+    reviewed_by_dev: Optional[str] = None
+    validated_by_qa: Optional[str] = None
+    approved_by_owner: Optional[str] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class RCAInputModel(BaseModel):
     task_monitoring_data: TaskMonitoringData
     github_pr: Optional[GitHubPRData] = None
     developer_issue_data: Optional[DeveloperIssueData] = None
     quality_gate_data: Optional[QualityGateData] = None
+    approval_data: Optional[RCAApprovalData] = None
+    attachments: list[Attachment] = Field(
+        default_factory=lambda: []
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
-                # -------------------------------------------------------
-                # Example 1 — EIL_2025000185: Disciplinary Action Approval Flow
-                # -------------------------------------------------------
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2025000185",
-                        "title": "Approval Flow of Disciplinary Action Module does not Take Effect if Approval Flow is updated",
+                        "title": "Approval Flow does not Take Effect if Updated",
                         "product": "Lotus",
-                        "client": "Roadmap",
+                        "client": "AMC",
                         "issue_type": "Issue/Error",
-                        "issue_description": "If an approval flow is created or updated after a DA application is created, the approval flow is not taking effect.",
-                        "implement_status": "Cancelled",
-                        "pre_condition": "DA Application, Approval Flow Setup",
-                        "test_steps": "File a DA > Update Approval Flow > Login as an Approver",
-                        "expected_result": "The approver should be able to view the Approve and Reject Button",
-                        "recommended_solution": "Review approval flow refresh logic after DA creation.",
-                        "error_message": "N/A",
+                        "issue_description": "Approval flow does not take effect when the approval flow setup is updated after a Disciplinary Action record has already been created.",
+                        "implement_status": "For Testing",
+                        "pre_condition": "A Disciplinary Action record exists and Approval Flow Setup is configured for the module.",
+                        "test_steps": "1. File a Disciplinary Action record.\n2. Update the Approval Flow Setup after the DA record is created.\n3. Log in as the assigned approver.\n4. Open the existing DA record.\n5. Verify whether the Approve and Reject buttons are displayed.",
+                        "expected_result": "The approver should see the Approve and Reject buttons based on the latest approval flow configuration.",
+                        "recommended_solution": "Ensure that existing Disciplinary Action records reload or refresh the latest approval flow configuration after approval-flow setup changes.",
+                        "error_message": "Not available.",
                         "urgency_level": "U4 - Low",
                         "impact_level": "I4 - Low",
                         "priority_level": "P4 - Low",
@@ -193,21 +185,24 @@ class RCAInputModel(BaseModel):
                     "github_pr": {
                         "pr_number": 1,
                         "pr_url": "https://github.com/TechIgnite-Business-Solutions-Inc/rnd-rca-gen/pull/1",
-                        "branch_name": "release/17FP2512_PL00",
+                        "branch_name": "fix/approval-flow-refresh",
                         "affected_modules": [
                             "Disciplinary Action",
                             "Approval Flow",
+                            "ApprovalFlowService",
                         ],
-                        "fixed_summary": "Updated approval flow checking logic.",
-                        "prevention_steps": "Add regression test for approval flow updates after DA creation.",
-                        "owner_review": "Reviewed by developer and QA.",
+                        "fixed_summary": "Added approval flow refresh logic so the system reloads the latest approval configuration when approval-flow setup changes are detected for existing Disciplinary Action records.",
+                        "prevention_steps": "Add regression test cases for Disciplinary Action approval-flow updates.",
+                        "owner_review": "Reviewed by the module owner.",
                     },
                     "developer_issue_data": {
                         "dev_status": "For Testing",
                         "pic_dev": "Jomar Talambayan",
-                        "dev_resolved_on": "2025-12-17T13:00:00",
-                        "dev_end_date": "2025-12-17T13:00:00",
-                        "dev_notes": "Developer encountered approval flow state not refreshing after DA record creation.",
+                        "affected_component": "ApprovalFlowService",
+                        "root_cause": "The approval workflow configuration is initialized only during record creation.",
+                        "fix_applied": "Added approval flow refresh logic.",
+                        "verification_result": "QA validated that Approve and Reject buttons are now displayed correctly.",
+                        "dev_notes": "Approval flow configuration now refreshes for existing DA records.",
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -216,29 +211,32 @@ class RCAInputModel(BaseModel):
                         "quality_gate_first_pass": True,
                         "smoke_test_first_pass": True,
                         "reopen_count": 0,
-                        "qa_status": "Ongoing",
-                        "qa_validated_on": None,
+                        "qa_status": "Passed",
                         "pic_qa": "Joan Marie Piñeda",
-                        "remarks": "Ready for RCA testing.",
+                        "remarks": "QA validated the fix.",
                     },
+                    "approval_data": {
+                        "prepared_by": "Jomar Talambayan",
+                        "reviewed_by_dev": "Jomar Talambayan",
+                        "validated_by_qa": "Joan Marie Piñeda",
+                        "approved_by_owner": "Module Owner",
+                    },
+                    "attachments": [],
                 },
-                # -------------------------------------------------------
-                # Example 2 — EIL_2026003374: Job Level Validation Inconsistency
-                # -------------------------------------------------------
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2026003374",
-                        "title": "DIREC Test Site (223): Inconsistent Job Level validation in All Applications module",
+                        "title": "Inconsistent Job Level validation in All Applications module",
                         "product": "Lotus",
                         "client": "DBTI",
                         "issue_type": "Issue/Error",
-                        "issue_description": "There is an inconsistency in how Job Level is validated across different modules.",
-                        "implement_status": "Open",
-                        "pre_condition": "All Applications module is accessible.",
-                        "test_steps": "Navigate to the selected module and validate Job Level rules.",
-                        "expected_result": "Validation rules for manual creation and import should be consistent.",
-                        "recommended_solution": "Standardize Job Level validation across related modules.",
-                        "error_message": "N/A",
+                        "issue_description": "Job Level validation behaves inconsistently between manual application creation and imported application records.",
+                        "implement_status": "For Testing",
+                        "pre_condition": "All Applications module is accessible and Job Level setup contains active validation rules.",
+                        "test_steps": "1. Create an application manually with Job Level data.\n2. Import an application record with Job Level data.\n3. Compare validation behavior.",
+                        "expected_result": "Manual and imported application records should follow the same Job Level validation rules.",
+                        "recommended_solution": "Standardize Job Level validation logic.",
+                        "error_message": "Not available.",
                         "urgency_level": "U2 - High",
                         "impact_level": "I2 - High",
                         "priority_level": "P2 - High",
@@ -249,48 +247,58 @@ class RCAInputModel(BaseModel):
                     "github_pr": {
                         "pr_number": 2,
                         "pr_url": "https://github.com/TechIgnite-Business-Solutions-Inc/rnd-rca-gen/pull/2",
-                        "branch_name": "job-level-validation-fix",
+                        "branch_name": "fix/job-level-validation",
                         "affected_modules": [
                             "All Applications",
-                            "Job Level",
+                            "Job Level Validation",
+                            "Application Import",
                         ],
-                        "fixed_summary": "Aligned Job Level validation rules across modules.",
-                        "prevention_steps": "Add validation test cases for manual creation and import flow.",
-                        "owner_review": "Pending developer and QA review.",
+                        "fixed_summary": "Aligned Job Level validation rules.",
+                        "prevention_steps": "Add validation test cases.",
+                        "owner_review": "Reviewed by recruitment module owner.",
                     },
                     "developer_issue_data": {
-                        "dev_status": "Open",
+                        "dev_status": "For Testing",
                         "pic_dev": "Christian Longos",
-                        "dev_notes": "Developer needs to check validation behavior difference between manual and imported records.",
+                        "affected_component": "JobLevelValidationService",
+                        "root_cause": "Manual application creation and import processing used separate validation paths.",
+                        "fix_applied": "Updated import validation path to reuse the same Job Level validation rules.",
+                        "verification_result": "QA validated consistent validation behavior.",
+                        "dev_notes": "Both creation paths now share one validation service.",
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
                         "fc_failed_testing": 0,
                         "existing_report": False,
-                        "quality_gate_first_pass": False,
-                        "smoke_test_first_pass": False,
+                        "quality_gate_first_pass": True,
+                        "smoke_test_first_pass": True,
                         "reopen_count": 0,
-                        "qa_status": "Open",
+                        "qa_status": "Passed",
                         "pic_qa": "Daniela Mhaey Buen",
+                        "remarks": "QA validated consistency.",
                     },
+                    "approval_data": {
+                        "prepared_by": "Christian Longos",
+                        "reviewed_by_dev": "Christian Longos",
+                        "validated_by_qa": "Daniela Mhaey Buen",
+                        "approved_by_owner": "Recruitment Module Owner",
+                    },
+                    "attachments": [],
                 },
-                # -------------------------------------------------------
-                # Example 3 — EIL_2026003361: Adjustment Log Incorrect Data
-                # -------------------------------------------------------
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2026003361",
-                        "title": "TOPBOND: Incorrect data - Adjustment Log details on Adjustment Processing",
+                        "title": "Incorrect Adjustment Log details on Adjustment Processing",
                         "product": "Lotus",
                         "client": "TopBond",
                         "issue_type": "Issue/Error",
-                        "issue_description": "Upon validating the Adjustment Log, unnecessary details are shown and may confuse the payroll processors.",
-                        "implement_status": "Open",
-                        "pre_condition": "Late approved application and Adjustment Processing.",
-                        "test_steps": "File late approved application and process adjustment processing.",
-                        "expected_result": "Adjustment Log should only show adjusted data based on the processed adjustment.",
-                        "recommended_solution": "Filter Adjustment Log entries to display only relevant adjusted records.",
-                        "error_message": "N/A",
+                        "issue_description": "Adjustment Log displays unnecessary entries during Adjustment Processing.",
+                        "implement_status": "For Testing",
+                        "pre_condition": "Late approved application exists and Adjustment Processing is available.",
+                        "test_steps": "1. File a late approved application.\n2. Run Adjustment Processing.\n3. Open Adjustment Log.\n4. Validate records.",
+                        "expected_result": "Adjustment Log should only display records directly related to the processed adjustment.",
+                        "recommended_solution": "Filter Adjustment Log output.",
+                        "error_message": "Not available.",
                         "urgency_level": "U1 - Critical",
                         "impact_level": "I1 - Critical",
                         "priority_level": "P1 - Critical",
@@ -301,33 +309,51 @@ class RCAInputModel(BaseModel):
                     "github_pr": {
                         "pr_number": 3,
                         "pr_url": "https://github.com/TechIgnite-Business-Solutions-Inc/rnd-rca-gen/pull/3",
-                        "branch_name": "adjustment-log-data-filtering",
+                        "branch_name": "fix/adjustment-log-filtering",
                         "affected_modules": [
                             "Adjustment Log",
                             "Adjustment Processing",
+                            "Payroll Adjustment",
                         ],
-                        "fixed_summary": "Restricted Adjustment Log output to relevant processed adjustment records.",
-                        "prevention_steps": "Add regression test for late approved application adjustment processing.",
-                        "owner_review": "Pending payroll module owner review.",
+                        "fixed_summary": "Restricted Adjustment Log output.",
+                        "prevention_steps": "Add regression tests.",
+                        "owner_review": "Reviewed by payroll module owner.",
                     },
                     "developer_issue_data": {
-                        "dev_status": "Open",
+                        "dev_status": "For Testing",
                         "pic_dev": "Reymond Biol",
-                        "dev_notes": "Developer encountered incorrect Adjustment Log display during payroll adjustment processing.",
+                        "affected_component": "AdjustmentLogService",
+                        "root_cause": "Adjustment Log retrieval was not scoped to the current processed adjustment transaction.",
+                        "fix_applied": "Updated Adjustment Log filtering condition.",
+                        "verification_result": "QA confirmed unnecessary entries no longer appear.",
+                        "dev_notes": "Filtering now uses adjustment transaction ID.",
                     },
                     "quality_gate_data": {
-                        "validation_status": "Open",
+                        "validation_status": "Validated",
                         "fc_failed_testing": 0,
                         "existing_report": False,
-                        "quality_gate_first_pass": False,
-                        "smoke_test_first_pass": False,
+                        "quality_gate_first_pass": True,
+                        "smoke_test_first_pass": True,
                         "reopen_count": 0,
-                        "qa_status": "Open",
+                        "qa_status": "Passed",
+                        "pic_qa": "Maria Santos",
+                        "remarks": "QA confirmed only relevant records appear.",
                     },
+                    "approval_data": {
+                        "prepared_by": "Reymond Biol",
+                        "reviewed_by_dev": "Reymond Biol",
+                        "validated_by_qa": "Maria Santos",
+                        "approved_by_owner": "Payroll Module Owner",
+                    },
+                    "attachments": [
+                        {
+                            "filename": "adjustment_log_sample.pdf",
+                            "file_path": "uploads/EIL_2026003361/adjustment_log_sample.pdf",
+                            "content_type": "application/pdf",
+                            "description": "Sample Adjustment Log showing unnecessary entries before filtering correction.",
+                        }
+                    ],
                 },
-                # -------------------------------------------------------
-                # Example 4 — EIL_2026003509: Attendance Summary Computation
-                # -------------------------------------------------------
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2026003509",
@@ -335,13 +361,13 @@ class RCAInputModel(BaseModel):
                         "product": "Lotus",
                         "client": "Mamasitas",
                         "issue_type": "Issue/Error",
-                        "issue_description": "The computation of work hours and absent hours is displayed incorrectly in Attendance Summary.",
-                        "implement_status": "Open",
-                        "pre_condition": "Work shift assigned should be straight time.",
-                        "test_steps": "Navigate to Attendance Summary and validate the logs of the employee.",
+                        "issue_description": "Attendance Summary displays incorrect work hours and absent hours for straight-time schedules.",
+                        "implement_status": "For Testing",
+                        "pre_condition": "Employee is assigned to a straight-time work schedule.",
+                        "test_steps": "1. Assign employee to straight-time schedule.\n2. Generate attendance logs.\n3. Open Attendance Summary.\n4. Compare computed hours.",
                         "expected_result": "Work hours and absent hours should be computed correctly.",
-                        "recommended_solution": "Review Attendance Summary computation for straight-time schedules.",
-                        "error_message": "N/A",
+                        "recommended_solution": "Correct Attendance Summary computation logic.",
+                        "error_message": "Not available.",
                         "urgency_level": "U2 - High",
                         "impact_level": "I2 - High",
                         "priority_level": "P2 - High",
@@ -352,29 +378,43 @@ class RCAInputModel(BaseModel):
                     "github_pr": {
                         "pr_number": 4,
                         "pr_url": "https://github.com/TechIgnite-Business-Solutions-Inc/rnd-rca-gen/pull/4",
-                        "branch_name": "attendance-summary-straight-time-computation",
+                        "branch_name": "fix/straight-time-attendance-computation",
                         "affected_modules": [
                             "Attendance Summary",
                             "Timekeeping Computation",
+                            "Straight-Time Schedule",
                         ],
-                        "fixed_summary": "Adjusted straight-time work and absent hour computation logic.",
-                        "prevention_steps": "Add smoke test for straight-time schedule computation.",
-                        "owner_review": "Pending timekeeping module owner review.",
+                        "fixed_summary": "Corrected straight-time attendance computation.",
+                        "prevention_steps": "Add smoke and regression tests.",
+                        "owner_review": "Reviewed by timekeeping module owner.",
                     },
                     "developer_issue_data": {
-                        "dev_status": "Open",
+                        "dev_status": "For Testing",
                         "pic_dev": "Lovely Bactol",
-                        "dev_notes": "Developer needs to review timekeeping computation for straight-time work schedules.",
+                        "affected_component": "AttendanceSummaryComputationService",
+                        "root_cause": "Straight-time schedule computation did not consistently apply the expected scheduled work-hour basis.",
+                        "fix_applied": "Updated attendance computation logic.",
+                        "verification_result": "QA confirmed work hours and absent hours are correct.",
+                        "dev_notes": "Schedule basis is now resolved per employee schedule assignment.",
                     },
                     "quality_gate_data": {
-                        "validation_status": "Open",
+                        "validation_status": "Validated",
                         "fc_failed_testing": 0,
                         "existing_report": False,
-                        "quality_gate_first_pass": False,
-                        "smoke_test_first_pass": False,
+                        "quality_gate_first_pass": True,
+                        "smoke_test_first_pass": True,
                         "reopen_count": 0,
-                        "qa_status": "Open",
+                        "qa_status": "Passed",
+                        "pic_qa": "Lovely Bactol",
+                        "remarks": "QA confirmed correct Attendance Summary computation.",
                     },
+                    "approval_data": {
+                        "prepared_by": "Lovely Bactol",
+                        "reviewed_by_dev": "Lovely Bactol",
+                        "validated_by_qa": "Lovely Bactol",
+                        "approved_by_owner": "Timekeeping Module Owner",
+                    },
+                    "attachments": [],
                 },
             ]
         }
@@ -385,6 +425,7 @@ class RCAOutputModel(BaseModel):
     issue_id: str = Field(..., min_length=1)
     markdown_rca: str = Field(..., min_length=1)
     pdf_file_path: Optional[str] = None
+    approval_status: ApprovalStatus = ApprovalStatus.DRAFT
     generated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -394,8 +435,9 @@ class RCAOutputModel(BaseModel):
         json_schema_extra={
             "example": {
                 "issue_id": "EIL_2025000185",
-                "markdown_rca": "# Root Cause Analysis\n\n## Issue\n...\n\n## Root Cause\n...\n\n## Solution\n...",
+                "markdown_rca": "# Root Cause Analysis\n\n## 1. Issue Summary\n...\n\n## 2. Root Cause\n...",
                 "pdf_file_path": "outputs/EIL_2025000185_rca.pdf",
+                "approval_status": "Draft",
                 "generated_at": "2026-06-10T12:00:00Z",
             }
         },

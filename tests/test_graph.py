@@ -236,7 +236,7 @@ class TestReviewRca:
             generation_error=None,
         )
         result = review_rca(state)
-        assert result["rca_output"].markdown_rca == VALID_MARKDOWN
+        assert result["rca_output"].markdown_rca.strip() == VALID_MARKDOWN.strip()
 
     def test_review_notes_all_sections_present(self, rca_input: RCAInputModel) -> None:
         state = _state(

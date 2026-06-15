@@ -1,5 +1,3 @@
-# api/health.py
-
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -37,3 +35,12 @@ async def gemini_health_check() -> dict[str, Any]:
     provider = get_gemini_provider()
     result = provider.health_check()
     return result.model_dump()
+
+
+@router.get("/langsmith", dependencies=[Depends(verify_api_key)])
+async def langsmith_health_check() -> dict[str, Any]:
+    return {
+        "tracing": settings.langsmith_tracing,
+        "enabled": settings.langsmith_enabled,
+        "project": settings.langsmith_project,
+    }

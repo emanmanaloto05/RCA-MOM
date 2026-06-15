@@ -1,31 +1,28 @@
-# FastAPI
-fastapi[standard]
-uvicorn
+fastapi[standard]>=0.116.0
+uvicorn>=0.35.0
 
-# Validation & Config
-pydantic
-pydantic-settings
-python-dotenv
+pydantic>=2.11.0
+pydantic-settings>=2.10.0
+python-dotenv>=1.1.0
 
-# Rate Limiting
-slowapi
-limits
+slowapi>=0.1.9
+limits>=5.5.0
 
-# AI / LangChain
-langchain
-langchain-core
-langchain-google-genai
-langgraph
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-google-genai>=2.1.0
+langgraph>=0.6.0
 
-# Prompt Templates
-jinja2
-pyyaml
+jinja2>=3.1.6
+pyyaml>=6.0.2
 
-# Google Gemini
-google-generativeai
+playwright>=1.54.0
 
-# HTTP Client
-httpx
+httpx>=0.28.1
 
-# Optional Tracing
-langsmith
+langsmith>=0.4.0
+
+pytest>=8.4.0
+pytest-asyncio>=1.1.0
+
+typing-extensions>=4.14.0
