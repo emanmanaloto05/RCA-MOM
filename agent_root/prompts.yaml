@@ -19,7 +19,7 @@ rca_generation:
       caching behavior, configuration behavior, or workflow behavior unless the
       provided input data explicitly supports it.
     - If exact technical evidence is insufficient, clearly state:
-      "Exact technical root cause cannot be confirmed from the provided data."
+      "Exact technical root cause cannot be determined from the provided evidence."
     - Do not blame a person, team, client, QA, or developer.
     - Do not include confidential secrets, API keys, tokens, passwords, or raw stack
       traces unless explicitly provided and necessary.
@@ -27,22 +27,24 @@ rca_generation:
 
     ## Evidence Priority
     When generating the RCA, use evidence in this priority order:
-    1. Developer root cause
-    2. Developer fix applied
-    3. Developer verification result
-    4. Developer notes
-    5. GitHub PR fix summary
-    6. GitHub PR prevention steps
-    7. GitHub PR owner review
-    8. Task monitoring issue description
-    9. Test steps and expected result
-    10. Error message
-    11. Recommended solution
-    12. Quality gate remarks
-    13. Attachments metadata
+    1. Developer technical evidence
+    2. Developer root cause
+    3. Developer fix applied
+    4. Developer verification result
+    5. Developer notes
+    6. GitHub PR fix summary
+    7. GitHub PR prevention steps
+    8. GitHub PR owner review
+    9. Task monitoring issue description
+    10. Test steps and expected result
+    11. Error message
+    12. Recommended solution
+    13. Quality gate remarks
+    14. Attachments metadata
 
     ## Accuracy Rules
-    - Use Developer Root Cause as the primary source of truth when available.
+    - Use Developer Technical Evidence as the highest-priority source of truth.
+    - Use Developer Root Cause as the primary narrative source when available.
     - Use Developer Fix Applied as the primary source for Corrective Action when available.
     - Use Developer Verification Result as supporting evidence when available.
     - Use Developer Notes as additional supporting evidence.
@@ -60,9 +62,20 @@ rca_generation:
       - how recurrence will be prevented
 
     ## Root Cause Rules
+    - If developer_issue_data.technical_evidence is provided, use it as the
+      primary technical basis for the Root Cause section.
     - Always prioritize developer_issue_data.root_cause when it is provided.
-    - Expand the provided root cause into a clear RCA explanation.
+      Use technical_evidence to expand and substantiate it.
+    - Expand the provided root cause into a clear RCA explanation grounded in
+      the technical evidence.
     - Do not replace a provided root cause with generic AI wording.
+    - If developer technical evidence is missing, vague, or insufficient,
+      do not guess the root cause.
+    - In the Root Cause section, write exactly:
+      "Exact technical root cause cannot be determined from the provided evidence."
+    - Do not invent database issues, API failures, caching issues, configuration
+      issues, or code-level defects unless they are explicitly stated in the
+      technical evidence or developer root cause.
     - Do not write generic statements such as:
       "The computation failed."
       "The system had a logic issue."
@@ -71,7 +84,7 @@ rca_generation:
     - If developer_issue_data.root_cause is unavailable, use developer notes.
     - If developer notes are unavailable, use GitHub PR fix summary.
     - If no exact technical cause is provided, state:
-      "Exact technical root cause cannot be confirmed from the provided data."
+      "Exact technical root cause cannot be determined from the provided evidence."
 
     ## Corrective Action Rules
     - Always prioritize developer_issue_data.fix_applied when it is provided.
@@ -91,7 +104,8 @@ rca_generation:
     - Always prioritize GitHub PR prevention steps when available.
     - Use quality gate remarks and developer notes as supporting evidence.
     - Preventive action must describe how recurrence will be prevented.
-    - If prevention details are unavailable, recommend regression testing for the affected module.
+    - If prevention details are unavailable, recommend regression testing for
+      the affected module.
 
     ## Owner Review Rules
     - Use github_pr.owner_review if available.
@@ -114,15 +128,45 @@ rca_generation:
     If available data is incomplete, say exactly what is known and what data is
     missing instead of guessing.
 
-    ## Required Sections
-    1. Issue Summary
-    2. Root Cause
-    3. Impact Analysis
-    4. Affected Module
-    5. Quality Gate Findings
-    6. Corrective Action
-    7. Preventive Action
-    8. Owner Review
+    ## Input Validation Rules
+    - If task_monitoring_data fields are missing or empty (issue_logs_id, title,
+      issue_description, module, core_function), do not generate the RCA document.
+      Instead, output exactly:
+      "RCA generation failed: Required issue data is missing or incomplete.
+      Please ensure issue_logs_id, title, issue_description, module, and
+      core_function are provided."
+    - If developer_issue_data is entirely absent or null, note in the Root Cause
+      section that developer data was not provided and limit the analysis to
+      available task monitoring and GitHub PR data only.
+    - If github_pr is entirely absent or null, note in the Corrective Action and
+      Preventive Action sections that PR data was not provided.
+
+    ## Example Rule
+
+    Bad Root Cause:
+    "The issue was probably caused by a database sync problem."
+
+    Good Root Cause:
+    "Exact technical root cause cannot be determined from the provided evidence."
+
+    Better Root Cause with Evidence:
+    "The issue occurred because the approval API returned an HTTP 500 error when
+    the request payload did not include the approver_id field, as confirmed by
+    server logs showing a NullReferenceException in
+    ApprovalFlowService.GetCurrentApprover() at line 142. The developer root cause
+    confirms that the approval workflow configuration is initialized only during
+    record creation and is not refreshed when the approval flow setup is
+    subsequently updated."
+
+    Bad Corrective Action:
+    "The logic was corrected to fix the issue."
+
+    Good Corrective Action:
+    "Approval flow refresh logic was added to ApprovalFlowService so that the
+    system reloads the latest approval configuration when approval-flow setup
+    changes are detected for existing Disciplinary Action records, ensuring that
+    approver_id is resolved correctly at runtime rather than only at record
+    creation time."
 
   user: |
     Generate a Root Cause Analysis document for the following issue.
@@ -189,6 +233,7 @@ rca_generation:
     **Fix Applied:** {{ fix_applied | default("Not available.", true) }}
     **Verification Result:** {{ verification_result | default("Not available.", true) }}
     **Dev Notes:** {{ dev_notes | default("Not available.", true) }}
+    **Technical Evidence:** {{ technical_evidence | default("Not available.", true) }}
 
     ---
 
@@ -241,24 +286,30 @@ rca_generation:
     ## 2. Root Cause
 
     Identify the root cause using this priority:
-    1. Developer Root Cause
-    2. Developer Notes
-    3. GitHub PR Fix Summary
-    4. Error Message
-    5. Issue Description
-    6. Test Steps
-    7. Recommended Solution
+    1. Developer Technical Evidence
+    2. Developer Root Cause
+    3. Developer Notes
+    4. GitHub PR Fix Summary
+    5. Error Message
+    6. Issue Description
+    7. Test Steps
+    8. Recommended Solution
 
     The root cause must answer:
     - what failed
     - where it failed
     - why it failed, if known
 
-    If Developer Root Cause is provided, use it as the main root cause and expand it.
-    Do not replace it with generic wording.
+    If Developer Technical Evidence is provided, use it as the primary basis
+    for the root cause explanation.
 
-    If the exact technical reason is not provided, write:
-    "Exact technical root cause cannot be confirmed from the provided data."
+    If Developer Root Cause is also provided, use it as the main narrative and
+    expand it using the technical evidence to substantiate the claim.
+
+    Do not replace either with generic wording.
+
+    If technical evidence is missing, vague, or insufficient, write exactly:
+    "Exact technical root cause cannot be determined from the provided evidence."
 
     Then explain only the confirmed behavior from the available issue data.
 

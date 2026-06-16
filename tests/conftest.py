@@ -106,33 +106,59 @@ def rca_input_minimal(task_data: TaskMonitoringData) -> RCAInputModel:
 
 
 # ---------------------------------------------------------------------------
-# Full markdown that passes review_rca validation
+# Full markdown that passes review_rca validation.
+#
+# Rules it must satisfy (enforced by review_rca / _validate_rca_quality):
+#   1. All 8 required section headings present.
+#   2. No forbidden/speculative phrases (probably, maybe, could be, etc.).
+#   3. Weak-placeholder occurrences ("not available", "not specified", "n/a")
+#      must stay below _MAX_WEAK_PLACEHOLDER_COUNT (14).
+#   4. "## 2. Root Cause" section body >= _MIN_SECTION_LENGTH (50 chars).
+#   5. "## 6. Corrective Action" section body >= _MIN_SECTION_LENGTH (50 chars).
+#
+# Additionally, test_service.py asserts these exact substrings are present:
+#   - "Root cause text here"   (TestExtractMarkdownSections)
+#   - "Applied fix"            (TestExtractMarkdownSections)
+#   - "Reviewed by owner"      (TestExtractMarkdownSections / TestRenderHtml)
 # ---------------------------------------------------------------------------
 
 VALID_MARKDOWN = """\
 ## 1. Issue Summary
-Summary text here.
+Issue EIL_TEST001 affects the Approval Flow module in the Lotus product for TestClient.
+The current implementation status is Open with a High priority level.
 
 ## 2. Root Cause
-Root cause text here.
+Root cause text here. The approval flow configuration was initialized only at record
+creation time and was not refreshed when the approval flow setup was subsequently
+updated, causing the Approve and Reject buttons to disappear for existing records.
 
 ## 3. Impact Analysis
-Impact text here.
+The issue has a High urgency and High impact level. Approvers could not action existing
+records after an approval flow update, blocking downstream processing. Not recurring.
 
 ## 4. Affected Module
-- Approval Flow
+- Product: Lotus
+- Module: Approval Flow
+- Core Function: NaveeWorkforce
+- Affected Component: ApprovalFlowService
 
 ## 5. Quality Gate Findings
-All passed.
+Quality Gate First Pass: Passed. Smoke Test First Pass: Passed. QA Status: Passed.
+Validation Status: Validated. Reopen Count: 0. FC Failed Testing: 0.
+Remarks: All tests passed.
 
 ## 6. Corrective Action
-Applied fix.
+Applied fix: approval flow refresh logic was added to ApprovalFlowService so that the
+system reloads the latest approval configuration when approval flow setup changes are
+detected for existing records, ensuring the correct approver is resolved at runtime.
 
 ## 7. Preventive Action
-Added regression test.
+A regression test case covering approval flow updates on existing records was added
+to the test suite to prevent recurrence of this class of defect in the future.
 
 ## 8. Owner Review
-Reviewed by owner.
+Reviewed by owner. The module owner confirmed that the fix resolves the issue and
+that the QA team validated the corrective action successfully.
 """
 
 

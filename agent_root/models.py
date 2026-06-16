@@ -111,6 +111,15 @@ class DeveloperIssueData(BaseModel):
     fix_applied: Optional[str] = None
     verification_result: Optional[str] = None
     dev_notes: Optional[str] = None
+    technical_evidence: Optional[str] = Field(
+        default=None,
+        min_length=10,
+        description=(
+            "Concrete technical evidence such as logs, error messages, stack traces, "
+            "affected function, API responses, or database query results that confirm "
+            "the root cause of the issue."
+        ),
+    )
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -203,6 +212,7 @@ class RCAInputModel(BaseModel):
                         "fix_applied": "Added approval flow refresh logic.",
                         "verification_result": "QA validated that Approve and Reject buttons are now displayed correctly.",
                         "dev_notes": "Approval flow configuration now refreshes for existing DA records.",
+                        "technical_evidence": "Approval API returned HTTP 500 when approver_id was missing from the request payload after approval flow setup was updated. Server logs showed NullReferenceException in ApprovalFlowService.GetCurrentApprover() at line 142.",
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -265,6 +275,7 @@ class RCAInputModel(BaseModel):
                         "fix_applied": "Updated import validation path to reuse the same Job Level validation rules.",
                         "verification_result": "QA validated consistent validation behavior.",
                         "dev_notes": "Both creation paths now share one validation service.",
+                        "technical_evidence": "Import endpoint bypassed JobLevelValidationService.Validate() and called a legacy validateJobLevel() function directly, confirmed via stack trace in application logs showing divergent call paths for POST /api/applications vs POST /api/applications/import.",
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -327,6 +338,7 @@ class RCAInputModel(BaseModel):
                         "fix_applied": "Updated Adjustment Log filtering condition.",
                         "verification_result": "QA confirmed unnecessary entries no longer appear.",
                         "dev_notes": "Filtering now uses adjustment transaction ID.",
+                        "technical_evidence": "Database query in AdjustmentLogService.GetLogs() returned 47 unrelated adjustment entries for transaction ID ADJ-2026-00391 because the WHERE clause lacked a transaction_id filter. Raw SQL log confirmed: SELECT * FROM adjustment_log WHERE employee_id = :emp_id (missing AND transaction_id = :txn_id).",
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -396,6 +408,7 @@ class RCAInputModel(BaseModel):
                         "fix_applied": "Updated attendance computation logic.",
                         "verification_result": "QA confirmed work hours and absent hours are correct.",
                         "dev_notes": "Schedule basis is now resolved per employee schedule assignment.",
+                        "technical_evidence": "AttendanceSummaryComputationService.ComputeHours() applied a default 8-hour basis instead of the employee's assigned straight-time schedule hours (7.5 hrs), confirmed via debug log showing schedule_basis=DEFAULT for employee ID EMP-20045 on 2026-05-12. Computed work_hours=8.0 vs expected 7.5, absent_hours=0.5 vs expected 0.0.",
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",

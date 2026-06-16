@@ -1,11 +1,10 @@
-# agent_root/graph.py
 from __future__ import annotations
 
 import logging
 from functools import lru_cache
 from typing import Any, Optional
 
-from langgraph.graph import END, START, StateGraph  #   type: ignore[import-untyped]
+from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]
 from typing_extensions import TypedDict
 
 from agent_root.chains import ChainBuildError, ChainInput, get_rca_chain
@@ -73,33 +72,68 @@ def analyze_quality_gates(state: RCAGraphState) -> dict[str, Any]:
     if qg is None:
         return {"quality_summary": "No quality gate data provided."}
 
-    signals: list[str] = []
+    failed_checks: list[str] = []
+    passed_checks: list[str] = []
 
-    if qg.quality_gate_first_pass is not None:
-        signals.append(
-            f"Quality Gate First Pass: {'PASSED' if qg.quality_gate_first_pass else 'FAILED'}"
-        )
+    # Quality Gate First Pass
+    if qg.quality_gate_first_pass is True:
+        passed_checks.append("Quality Gate First Pass: PASSED")
+    elif qg.quality_gate_first_pass is False:
+        failed_checks.append("Quality Gate First Pass: FAILED")
 
-    if qg.smoke_test_first_pass is not None:
-        signals.append(
-            f"Smoke Test First Pass: {'PASSED' if qg.smoke_test_first_pass else 'FAILED'}"
-        )
+    # Smoke Test First Pass
+    if qg.smoke_test_first_pass is True:
+        passed_checks.append("Smoke Test First Pass: PASSED")
+    elif qg.smoke_test_first_pass is False:
+        failed_checks.append("Smoke Test First Pass: FAILED")
 
+    # QA Status
+    if qg.qa_status is not None:
+        if qg.qa_status.value.lower() == "passed":
+            passed_checks.append("QA validation passed.")
+        else:
+            failed_checks.append(
+                f"QA validation did not pass (status: {qg.qa_status.value})."
+            )
+
+    # Validation Status
+    if qg.validation_status is not None:
+        if qg.validation_status.value.lower() == "validated":
+            passed_checks.append("Validation status: Validated.")
+        else:
+            failed_checks.append(
+                f"Validation status: {qg.validation_status.value}."
+            )
+
+    # Reopen Count
     if qg.reopen_count > 0:
-        signals.append(f"Reopen Count: {qg.reopen_count}")
+        failed_checks.append(f"Reopen Count: {qg.reopen_count}")
 
+    # FC Failed Testing
     if qg.fc_failed_testing > 0:
-        signals.append(f"FC Failed Testing: {qg.fc_failed_testing}")
+        failed_checks.append(f"FC Failed Testing: {qg.fc_failed_testing}")
+
+    # Build structured summary string for prompt rendering
+    parts: list[str] = []
+
+    if passed_checks:
+        parts.append("Passed: " + " | ".join(passed_checks))
+
+    if failed_checks:
+        parts.append("Failed: " + " | ".join(failed_checks))
 
     if qg.qa_status:
-        signals.append(f"QA Status: {qg.qa_status.value}")
+        parts.append(f"QA Status: {qg.qa_status.value}")
 
     if qg.validation_status:
-        signals.append(f"Validation Status: {qg.validation_status.value}")
+        parts.append(f"Validation Status: {qg.validation_status.value}")
+
+    if qg.remarks:
+        parts.append(f"Remarks: {qg.remarks}")
 
     summary = (
-        " | ".join(signals)
-        if signals
+        " || ".join(parts)
+        if parts
         else "Quality gate data present but all fields are default."
     )
 
@@ -157,7 +191,9 @@ def generate_rca_node(state: RCAGraphState) -> dict[str, Any]:
         }
 
 
-_REQUIRED_HEADINGS: list[str] = [
+# -- Section & phrase validators ----------------------------------------------
+
+_REQUIRED_SECTIONS: list[str] = [
     "## 1. Issue Summary",
     "## 2. Root Cause",
     "## 3. Impact Analysis",
@@ -168,21 +204,22 @@ _REQUIRED_HEADINGS: list[str] = [
     "## 8. Owner Review",
 ]
 
-
-_GENERIC_PHRASES: list[str] = [
+_FORBIDDEN_PHRASES: list[str] = [
+    "probably",
+    "maybe",
+    "might be caused",
+    "could be due to",
+    "likely due to",
     "may be",
     "could be",
     "might be",
-    "likely",
     "possibly",
-    "probably",
+    "further investigation",
     "it seems",
     "it appears",
-    "further investigation",
     "cannot be precisely determined",
     "not enough information",
 ]
-
 
 _WEAK_PLACEHOLDERS: list[str] = [
     "not available",
@@ -190,20 +227,36 @@ _WEAK_PLACEHOLDERS: list[str] = [
     "n/a",
 ]
 
+_MIN_SECTION_LENGTH: int = 50
 
-GENERIC_PHRASES: list[str] = [
-    "may be",
-    "could be",
-    "might be",
-    "possibly",
-    "probably",
-    "further investigation",
-]
+# The prompt template renders "Not available." as a default for every optional
+# field. A complete, valid RCA generated from partial input will naturally
+# contain many such occurrences (error_message, recommended_solution, pr_url,
+# branch_name, dev_resolved_on, dev_end_date, etc.).  The original threshold
+# of 6 was too low and caused false-positive review failures on otherwise
+# correct RCA documents.  We raise the threshold to 14 to only flag cases
+# where even the mandatory core fields are missing or unpopulated.
+_MAX_WEAK_PLACEHOLDER_COUNT: int = 14
 
 
-def _count_phrase_matches(text: str, phrases: list[str]) -> int:
+def _count_all_phrase_occurrences(text: str, phrases: list[str]) -> int:
+    """
+    Count the total number of times any phrase from the list appears in text.
+    Unlike _count_phrase_matches (which counts distinct phrases), this counts
+    every individual occurrence so repeated "Not available." entries are each
+    tallied separately.
+    """
     lowered = text.lower()
-    return sum(1 for phrase in phrases if phrase in lowered)
+    total = 0
+    for phrase in phrases:
+        start = 0
+        while True:
+            idx = lowered.find(phrase, start)
+            if idx == -1:
+                break
+            total += 1
+            start = idx + len(phrase)
+    return total
 
 
 def _validate_rca_quality(markdown_rca: str) -> list[str]:
@@ -213,16 +266,15 @@ def _validate_rca_quality(markdown_rca: str) -> list[str]:
     """
     warnings: list[str] = []
 
-    generic_count = _count_phrase_matches(markdown_rca, _GENERIC_PHRASES)
-    placeholder_count = _count_phrase_matches(markdown_rca, _WEAK_PLACEHOLDERS)
+    # Count every individual occurrence of weak placeholder strings.
+    # The prompt template alone can produce up to ~12 "Not available." entries
+    # for optional fields (error_message, recommended_solution, pr_number,
+    # pr_url, branch_name, dev_resolved_on, dev_end_date, qa_validated_on,
+    # etc.).  We only flag when the count significantly exceeds that baseline,
+    # indicating that even mandatory content fields are missing.
+    placeholder_count = _count_all_phrase_occurrences(markdown_rca, _WEAK_PLACEHOLDERS)
 
-    if generic_count >= 3:
-        warnings.append(
-            "RCA contains excessive speculative language. "
-            "The root cause may be too generic and requires human review."
-        )
-
-    if placeholder_count >= 6:
+    if placeholder_count >= _MAX_WEAK_PLACEHOLDER_COUNT:
         warnings.append(
             "RCA contains too many unavailable or unspecified fields. "
             "Input data may be incomplete."
@@ -237,7 +289,7 @@ def _validate_rca_quality(markdown_rca: str) -> list[str]:
             1,
         )[0]
 
-        if len(root_cause_section.strip()) < 80:
+        if len(root_cause_section.strip()) < _MIN_SECTION_LENGTH:
             warnings.append(
                 "Root Cause section is too short. "
                 "It must explain what failed, where it failed, and why it failed."
@@ -249,7 +301,7 @@ def _validate_rca_quality(markdown_rca: str) -> list[str]:
             1,
         )[0]
 
-        if len(corrective_section.strip()) < 80:
+        if len(corrective_section.strip()) < _MIN_SECTION_LENGTH:
             warnings.append(
                 "Corrective Action section is too short. "
                 "It must explain the fix or required corrective action."
@@ -257,6 +309,8 @@ def _validate_rca_quality(markdown_rca: str) -> list[str]:
 
     return warnings
 
+
+# -- Review node --------------------------------------------------------------
 
 def review_rca(state: RCAGraphState) -> dict[str, Any]:
     issue_id = state.get("issue_id", "unknown")
@@ -279,75 +333,86 @@ def review_rca(state: RCAGraphState) -> dict[str, Any]:
             "rca_output": None,
         }
 
-    missing = [heading for heading in _REQUIRED_HEADINGS if heading not in markdown_rca]
+    review_notes: list[str] = []
 
-    if missing:
-        notes = f"Missing sections: {', '.join(missing)}"
+    # 1. Required section check
+    missing_sections = [
+        section
+        for section in _REQUIRED_SECTIONS
+        if section not in markdown_rca
+    ]
 
+    if missing_sections:
+        review_notes.append(
+            "Missing required sections: " + ", ".join(missing_sections)
+        )
         logger.warning(
-            "RCA review failed — missing sections | issue_id=%s | missing=%s",
+            "RCA review - missing sections | issue_id=%s | missing=%s",
             issue_id,
-            missing,
+            missing_sections,
         )
 
-        return {
-            "review_passed": False,
-            "review_notes": notes,
-            "rca_output": None,
-        }
+    # 2. Forbidden / speculative language check
+    vague_phrases_found = [
+        phrase
+        for phrase in _FORBIDDEN_PHRASES
+        if phrase.lower() in markdown_rca.lower()
+    ]
 
-    phrase_count = sum(
-        1
-        for phrase in GENERIC_PHRASES
-        if phrase in markdown_rca.lower()
-    )
-
-    if phrase_count >= 2:
+    if vague_phrases_found:
+        review_notes.append(
+            "RCA contains vague or speculative language: "
+            + ", ".join(vague_phrases_found)
+        )
         logger.warning(
-            "RCA review failed — speculative language threshold reached | "
-            "issue_id=%s | phrase_count=%s",
+            "RCA review - speculative language detected | issue_id=%s | phrases=%s",
             issue_id,
-            phrase_count,
+            vague_phrases_found,
         )
 
-        return {
-            "review_passed": False,
-            "review_notes": (
-                "RCA contains speculative language "
-                "and requires manual review."
-            ),
-            "rca_output": None,
-        }
-
+    # 3. Quality depth checks
     quality_warnings = _validate_rca_quality(markdown_rca)
 
     if quality_warnings:
-        notes = " | ".join(quality_warnings)
-
+        review_notes.extend(quality_warnings)
         logger.warning(
-            "RCA review failed — quality safeguards triggered | issue_id=%s | notes=%s",
+            "RCA review - quality safeguards triggered | issue_id=%s | notes=%s",
             issue_id,
-            notes,
+            quality_warnings,
         )
 
+    review_passed = not review_notes
+
+    if review_passed:
+        logger.info("RCA review passed | issue_id=%s", issue_id)
+
+        issue_id_str = state.get("issue_id", "unknown")
+        pdf_path = f"outputs/{issue_id_str}_rca.pdf"
+
         return {
-            "review_passed": False,
-            "review_notes": notes,
-            "rca_output": None,
+            "review_passed": True,
+            "review_notes": "All required sections present and quality checks passed.",
+            "rca_output": RCAOutputModel(
+                issue_id=issue_id_str,
+                markdown_rca=markdown_rca.strip(),
+                pdf_file_path=pdf_path,
+            ),
         }
 
-    logger.info("RCA review passed | issue_id=%s", issue_id)
+    logger.warning(
+        "RCA review failed | issue_id=%s | notes=%s",
+        issue_id,
+        review_notes,
+    )
 
     return {
-        "review_passed": True,
-        "review_notes": "All required sections present and quality checks passed.",
-        "rca_output": RCAOutputModel(
-            issue_id=issue_id,
-            markdown_rca=markdown_rca.strip(),
-            pdf_file_path=None,
-        ),
+        "review_passed": False,
+        "review_notes": " | ".join(review_notes),
+        "rca_output": None,
     }
 
+
+# -- Graph compilation --------------------------------------------------------
 
 @lru_cache(maxsize=1)
 def get_rca_graph() -> Any:

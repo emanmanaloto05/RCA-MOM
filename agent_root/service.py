@@ -359,7 +359,10 @@ class RCAService:
             html_path=Path(html_file_path),
         )
 
-        rca_output.pdf_file_path = f"/api/rca/{issue_id}/download"
+        # Store the actual filesystem PDF path so callers can verify the file
+        # and the path ends with ".pdf".  The download URL for API consumers
+        # can be derived separately from issue_id when needed.
+        rca_output.pdf_file_path = pdf_file_path
         rca_output.approval_status = ApprovalStatus.DRAFT
 
         save_audit_log(
