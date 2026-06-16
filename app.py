@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request, Response, status
@@ -16,6 +18,7 @@ from api.dependencies import verify_api_key
 from api.health import router as health_router
 from api.routes import router as rca_router
 from common.rate_limit import limiter
+from config.providers import get_gemini_model, get_openai_provider
 from config.settings import settings
 
 logging.basicConfig(
@@ -32,13 +35,87 @@ except Exception as exc:
     langsmith_client = None
     logger.warning("LangSmith client not initialized: %s", exc)
 
+
+def _openai_is_used() -> bool:
+    providers = [
+        settings.issue_summary_provider,
+        settings.root_cause_provider,
+        settings.impact_analysis_provider,
+        settings.affected_module_provider,
+        settings.quality_gate_provider,
+        settings.corrective_action_provider,
+        settings.preventive_action_provider,
+        settings.owner_review_provider,
+    ]
+
+    return any(
+        provider.lower() == "openai"
+        for provider in providers
+    )
+
+
+def _validate_providers() -> None:
+    errors: list[str] = []
+
+    if not settings.google_api_key:
+        errors.append("GOOGLE_API_KEY is missing or empty.")
+    else:
+        try:
+            get_gemini_model()
+            logger.info(
+                "Startup validation: Gemini provider OK | model=%s",
+                settings.gemini_model,
+            )
+        except Exception as exc:
+            errors.append(f"Gemini provider init failed: {exc}")
+
+    if _openai_is_used():
+        try:
+            get_openai_provider()
+            logger.info(
+                "Startup validation: OpenAI provider OK | model=%s",
+                settings.openai_default_model,
+            )
+        except Exception as exc:
+            errors.append(f"OpenAI provider init failed: {exc}")
+    else:
+        logger.info(
+            "Startup validation: OpenAI skipped because no section uses OpenAI."
+        )
+
+    if errors:
+        raise RuntimeError(
+            "Provider startup validation failed:\n"
+            + "\n".join(f"  - {error}" for error in errors)
+        )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    logger.info("RCA Generator API starting up — running provider validation...")
+
+    try:
+        _validate_providers()
+        logger.info("All provider validations passed. API is ready.")
+    except RuntimeError as exc:
+        logger.critical(
+            "Startup validation failed — server will not start.\n%s",
+            exc,
+        )
+        raise
+
+    yield
+
+    logger.info("RCA Generator API shutting down.")
+
+
 app = FastAPI(
     title="RCA Generator API",
     description="AI-powered Root Cause Analysis Generator",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
-# Rate limiting
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 
@@ -56,7 +133,6 @@ async def rate_limit_handler(
     )
 
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,

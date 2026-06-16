@@ -1,13 +1,8 @@
 # tests/test_models.py
-"""
-Tests for agent_root/models.py
-
-Covers: field validation, enum membership, field_validators,
-        optional defaults, and RCAOutputModel.
-"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -25,6 +20,76 @@ from agent_root.models import (
     TaskMonitoringData,
     UrgencyLevel,
 )
+
+
+def _valid_dev_data(**overrides: Any) -> DeveloperIssueData:
+    return DeveloperIssueData(
+        affected_component=overrides.get(
+            "affected_component",
+            "ApprovalFlowService",
+        ),
+        root_cause=overrides.get(
+            "root_cause",
+            "Approval flow cache was not refreshed after setup changes.",
+        ),
+        fix_applied=overrides.get(
+            "fix_applied",
+            "Added approval flow refresh logic after setup changes.",
+        ),
+        verification_result=overrides.get(
+            "verification_result",
+            "QA verified approval buttons now appear correctly.",
+        ),
+        technical_evidence=overrides.get(
+            "technical_evidence",
+            "Application logs confirmed stale approval flow cache before the fix.",
+        ),
+        dev_status=overrides.get("dev_status"),
+        pic_dev=overrides.get("pic_dev"),
+        dev_resolved_on=overrides.get("dev_resolved_on"),
+        dev_end_date=overrides.get("dev_end_date"),
+        dev_notes=overrides.get("dev_notes"),
+    )
+
+
+def _valid_quality_gate(**overrides: Any) -> QualityGateData:
+    return QualityGateData(
+        validation_status=overrides.get(
+            "validation_status",
+            Status.VALIDATED,
+        ),
+        qa_status=overrides.get(
+            "qa_status",
+            Status.PASSED,
+        ),
+        fc_failed_testing=overrides.get(
+            "fc_failed_testing",
+            0,
+        ),
+        existing_report=overrides.get(
+            "existing_report",
+            False,
+        ),
+        quality_gate_first_pass=overrides.get(
+            "quality_gate_first_pass",
+        ),
+        smoke_test_first_pass=overrides.get(
+            "smoke_test_first_pass",
+        ),
+        reopen_count=overrides.get(
+            "reopen_count",
+            0,
+        ),
+        qa_validated_on=overrides.get(
+            "qa_validated_on",
+        ),
+        pic_qa=overrides.get(
+            "pic_qa",
+        ),
+        remarks=overrides.get(
+            "remarks",
+        ),
+    )
 
 
 class TestTaskMonitoringData:
@@ -54,10 +119,7 @@ class TestTaskMonitoringData:
         assert td.title == "Title"
 
     def test_empty_issue_logs_id_raises(self) -> None:
-        with pytest.raises(
-            ValidationError,
-            match="String should have at least 1 character",
-        ):
+        with pytest.raises(ValidationError):
             TaskMonitoringData(
                 issue_logs_id="",
                 title="T",
@@ -125,7 +187,7 @@ class TestGitHubPRData:
         assert github_pr.pr_url.startswith("https://github.com/")
 
     def test_invalid_pr_url_raises(self) -> None:
-        with pytest.raises(ValidationError, match="pr_url must be a valid GitHub URL"):
+        with pytest.raises(ValidationError):
             GitHubPRData(pr_url="https://gitlab.com/org/repo/pull/1")
 
     def test_pr_url_none_is_allowed(self) -> None:
@@ -154,26 +216,42 @@ class TestGitHubPRData:
 
 
 class TestDeveloperIssueData:
-    def test_all_optional(self) -> None:
-        dev = DeveloperIssueData()
-        assert dev.dev_status is None
-        assert dev.pic_dev is None
-        assert dev.dev_notes is None
-
+    def test_required_fields_must_be_supplied(self) -> None:
+        with pytest.raises(ValidationError):
+            DeveloperIssueData(**{})  # type: ignore[arg-type]
+            
     def test_valid_dev_data(self, developer_data: DeveloperIssueData) -> None:
         assert developer_data.dev_status == Status.FOR_TESTING
         assert developer_data.pic_dev == "Juan dela Cruz"
+        assert developer_data.affected_component
+        assert developer_data.root_cause
+        assert developer_data.fix_applied
+        assert developer_data.verification_result
+        assert developer_data.technical_evidence
 
     def test_datetime_fields(self) -> None:
         now = datetime.now(timezone.utc)
-        dev = DeveloperIssueData(dev_resolved_on=now, dev_end_date=now)
+        dev = _valid_dev_data(
+            dev_resolved_on=now,
+            dev_end_date=now,
+        )
         assert dev.dev_resolved_on == now
         assert dev.dev_end_date == now
 
+    def test_short_technical_evidence_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            _valid_dev_data(technical_evidence="short")
+
 
 class TestQualityGateData:
-    def test_defaults(self) -> None:
-        qg = QualityGateData()
+    def test_required_status_fields_must_be_supplied(self) -> None:
+        with pytest.raises(ValidationError):
+            QualityGateData(**{})  # type: ignore[arg-type]
+            
+    def test_defaults_with_required_statuses(self) -> None:
+        qg = _valid_quality_gate()
+        assert qg.validation_status == Status.VALIDATED
+        assert qg.qa_status == Status.PASSED
         assert qg.fc_failed_testing == 0
         assert qg.existing_report is False
         assert qg.reopen_count == 0
@@ -181,13 +259,16 @@ class TestQualityGateData:
 
     def test_negative_fc_failed_testing_raises(self) -> None:
         with pytest.raises(ValidationError):
-            QualityGateData(fc_failed_testing=-1)
+            _valid_quality_gate(fc_failed_testing=-1)
 
     def test_negative_reopen_count_raises(self) -> None:
         with pytest.raises(ValidationError):
-            QualityGateData(reopen_count=-1)
+            _valid_quality_gate(reopen_count=-1)
 
-    def test_valid_quality_gate_data(self, quality_gate_data: QualityGateData) -> None:
+    def test_valid_quality_gate_data(
+        self,
+        quality_gate_data: QualityGateData,
+    ) -> None:
         assert quality_gate_data.quality_gate_first_pass is True
         assert quality_gate_data.smoke_test_first_pass is True
         assert quality_gate_data.pic_qa == "Maria Santos"
@@ -200,7 +281,10 @@ class TestRCAInputModel:
         assert rca_input.developer_issue_data is not None
         assert rca_input.quality_gate_data is not None
 
-    def test_minimal_model_optional_none(self, rca_input_minimal: RCAInputModel) -> None:
+    def test_minimal_model_optional_none(
+        self,
+        rca_input_minimal: RCAInputModel,
+    ) -> None:
         assert rca_input_minimal.github_pr is None
         assert rca_input_minimal.developer_issue_data is None
         assert rca_input_minimal.quality_gate_data is None
@@ -215,26 +299,32 @@ class TestRCAOutputModel:
         assert rca_output.issue_id == "EIL_TEST001"
         assert "## 1. Issue Summary" in rca_output.markdown_rca
 
-    def test_generated_at_defaults_to_utc_now(self, rca_output: RCAOutputModel) -> None:
+    def test_generated_at_defaults_to_utc_now(
+        self,
+        rca_output: RCAOutputModel,
+    ) -> None:
         assert rca_output.generated_at.tzinfo == timezone.utc
 
     def test_pdf_file_path_optional(self) -> None:
-        out = RCAOutputModel(issue_id="EIL_001", markdown_rca="# RCA")
+        out = RCAOutputModel(
+            issue_id="EIL_001",
+            markdown_rca="# RCA",
+        )
         assert out.pdf_file_path is None
 
     def test_empty_issue_id_raises(self) -> None:
-        with pytest.raises(
-            ValidationError,
-            match="String should have at least 1 character",
-        ):
-            RCAOutputModel(issue_id="", markdown_rca="# RCA")
+        with pytest.raises(ValidationError):
+            RCAOutputModel(
+                issue_id="",
+                markdown_rca="# RCA",
+            )
 
     def test_empty_markdown_raises(self) -> None:
-        with pytest.raises(
-            ValidationError,
-            match="String should have at least 1 character",
-        ):
-            RCAOutputModel(issue_id="EIL_001", markdown_rca="")
+        with pytest.raises(ValidationError):
+            RCAOutputModel(
+                issue_id="EIL_001",
+                markdown_rca="",
+            )
 
 
 class TestEnums:

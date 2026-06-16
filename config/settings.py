@@ -12,10 +12,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     Application configuration loaded from .env and environment variables.
-
-    Note:
-        This file should only contain configuration and validation.
-        FastAPI dependencies such as verify_api_key must stay in api/dependencies.py.
     """
 
     model_config = SettingsConfigDict(
@@ -25,144 +21,97 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # =========================================================================
-    # API SECURITY
-    # =========================================================================
+    # API Security
+    api_key: str = Field(default="CHANGE_ME")
+    api_key_header: str = Field(default="X-API-Key")
+    api_key_headers_json: str = Field(default="")
 
-    api_key: str = Field(
-        default="CHANGE_ME",
-        description="Primary API key. Must be at least 32 characters.",
-    )
+    # Google Gemini
+    google_api_key: str = Field(default="CHANGE_ME")
+    gemini_default_model: str = Field(default="gemini-2.5-flash")
+    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_top_k: int = Field(default=40, ge=1, le=100)
 
-    api_key_header: str = Field(
-        default="X-API-Key",
-        description="HTTP header name used to supply the API key.",
-    )
+    # OpenAI
+    openai_api_key: str = Field(default="CHANGE_ME")
+    openai_default_model: str = Field(default="gpt-5.5")
 
-    api_key_headers_json: str = Field(
-        default="",
-        description=(
-            "Optional JSON mapping of additional API key headers. "
-            'Example: {"X-CLIENT-A-KEY": ["key1"], "X-CLIENT-B-KEY": "key2"}'
-        ),
-    )
+    # RCA Agent - Issue Summary
+    issue_summary_provider: str = Field(default="gemini")
+    issue_summary_model: str = Field(default="gemini-2.5-flash")
 
-    # =========================================================================
-    # GOOGLE GEMINI
-    # =========================================================================
+    # RCA Agent - Root Cause
+    root_cause_provider: str = Field(default="openai")
+    root_cause_model: str = Field(default="gpt-5.5-pro")
 
-    google_api_key: str = Field(
-        default="CHANGE_ME",
-        description="Google AI Studio API key.",
-    )
+    # RCA Agent - Impact Analysis
+    impact_analysis_provider: str = Field(default="openai")
+    impact_analysis_model: str = Field(default="gpt-5.5")
 
-    gemini_model: str = Field(
-        default="gemini-2.5-flash",
-        description="Gemini model name.",
-    )
+    # RCA Agent - Affected Module
+    affected_module_provider: str = Field(default="gemini")
+    affected_module_model: str = Field(default="gemini-2.5-flash")
 
-    gemini_temperature: float = Field(
-        default=0.2,
-        ge=0.0,
-        le=1.0,
-        description="Gemini sampling temperature.",
-    )
+    # RCA Agent - Quality Gate Findings
+    quality_gate_provider: str = Field(default="gemini")
+    quality_gate_model: str = Field(default="gemini-2.5-flash")
 
-    gemini_max_output_tokens: int = Field(
-        default=8192,
-        ge=256,
-        le=32768,
-        description="Maximum Gemini output tokens.",
-    )
+    # RCA Agent - Corrective Action
+    corrective_action_provider: str = Field(default="openai")
+    corrective_action_model: str = Field(default="gpt-5.5")
 
-    gemini_top_p: float = Field(
-        default=0.95,
-        ge=0.0,
-        le=1.0,
-        description="Gemini top-p value.",
-    )
+    # RCA Agent - Preventive Action
+    preventive_action_provider: str = Field(default="openai")
+    preventive_action_model: str = Field(default="gpt-5.5")
 
-    gemini_top_k: int = Field(
-        default=40,
-        ge=1,
-        le=100,
-        description="Gemini top-k value.",
-    )
+    # RCA Agent - Owner Review
+    owner_review_provider: str = Field(default="gemini")
+    owner_review_model: str = Field(default="gemini-2.5-flash")
 
-    gemini_max_retries: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Maximum Gemini retry attempts.",
-    )
+    # RCA Agent - Final Reviewer
+    rca_reviewer_provider: str = Field(default="openai")
+    rca_reviewer_model: str = Field(default="gpt-5.5-pro")
 
-    gemini_request_timeout: int = Field(
-        default=60,
-        ge=10,
-        le=300,
-        description="Gemini request timeout in seconds.",
-    )
+    # RCA Agent - Final Assembler
+    rca_assembler_provider: str = Field(default="gemini")
+    rca_assembler_model: str = Field(default="gemini-2.5-flash")
 
-    # =========================================================================
-    # LANGSMITH
-    # =========================================================================
+    # Shared AI Parameters
+    ai_temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    ai_max_output_tokens: int = Field(default=8192, ge=256, le=32768)
+    ai_top_p: float = Field(default=0.95, ge=0.0, le=1.0)
+    ai_max_retries: int = Field(default=3, ge=1, le=10)
+    ai_request_timeout: int = Field(default=60, ge=10, le=300)
 
-    langsmith_tracing: bool = Field(
-        default=False,
-        description="Enable or disable LangSmith tracing.",
-    )
+    # Backward-compatible Gemini Parameters
+    gemini_temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    gemini_max_output_tokens: int = Field(default=8192, ge=256, le=32768)
+    gemini_top_p: float = Field(default=0.95, ge=0.0, le=1.0)
+    gemini_max_retries: int = Field(default=3, ge=1, le=10)
+    gemini_request_timeout: int = Field(default=60, ge=10, le=300)
 
-    langsmith_endpoint: str = Field(
-        default="https://api.smith.langchain.com",
-        description="LangSmith endpoint.",
-    )
+    # OpenAI Parameters
+    openai_reasoning_effort: str = Field(default="medium")
 
-    langsmith_api_key: str | None = Field(
-        default=None,
-        description="LangSmith API key.",
-    )
+    # LangSmith
+    langsmith_tracing: bool = Field(default=False)
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com")
+    langsmith_api_key: str | None = Field(default=None)
+    langsmith_project: str = Field(default="HRS AI Implementation")
 
-    langsmith_project: str = Field(
-        default="RCA Generator",
-        description="LangSmith project name.",
-    )
-
-    # =========================================================================
     # CORS
-    # =========================================================================
-
     allowed_origins: str = Field(
-        default="http://127.0.0.1:8000,http://localhost:8000",
-        description="Comma-separated allowed CORS origins.",
+        default="http://127.0.0.1:8000,http://localhost:8000"
     )
 
-    # =========================================================================
-    # RATE LIMITING
-    # =========================================================================
+    # Rate Limiting
+    rate_limit_default: str = Field(default="60/minute")
+    rate_limit_rca_generation: str = Field(default="10/minute")
 
-    rate_limit_default: str = Field(
-        default="60/minute",
-        description="Default API rate limit.",
-    )
+    # Logging
+    log_level: str = Field(default="INFO")
 
-    rate_limit_rca_generation: str = Field(
-        default="10/minute",
-        description="RCA generation endpoint rate limit.",
-    )
-
-    # =========================================================================
-    # LOGGING
-    # =========================================================================
-
-    log_level: str = Field(
-        default="INFO",
-        description="Application log level.",
-    )
-
-    # =========================================================================
-    # VALIDATORS
-    # =========================================================================
-
+    # Validators
     @field_validator("api_key")
     @classmethod
     def validate_api_key(cls, value: str) -> str:
@@ -211,6 +160,7 @@ class Settings(BaseSettings):
             "password123",
             "your_api_key_here",
             "your_actual_gemini_api_key",
+            "replace_with_your_google_ai_studio_key",
         }
 
         if value in forbidden_values:
@@ -224,23 +174,92 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("gemini_model")
+    @field_validator("openai_api_key")
     @classmethod
-    def validate_gemini_model(cls, value: str) -> str:
+    def validate_openai_api_key(cls, value: str) -> str:
         value = value.strip()
 
-        allowed_models = {
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            "gemini-1.5-pro",
-            "gemini-2.0-flash",
-            "gemini-2.5-flash",
+        if not value:
+            raise ValueError("OPENAI_API_KEY cannot be empty.")
+
+        forbidden_values = {
+            "CHANGE_ME",
+            "password123",
+            "your_api_key_here",
+            "replace_with_openai_api_key",
         }
 
-        if value not in allowed_models:
+        if value in forbidden_values:
+            raise ValueError("OPENAI_API_KEY cannot use a placeholder value.")
+
+        if " " in value:
+            raise ValueError("OPENAI_API_KEY must not contain spaces.")
+
+        return value
+
+    @field_validator(
+        "gemini_model",
+        "gemini_default_model",
+        "issue_summary_model",
+        "root_cause_model",
+        "impact_analysis_model",
+        "affected_module_model",
+        "quality_gate_model",
+        "corrective_action_model",
+        "preventive_action_model",
+        "owner_review_model",
+        "rca_reviewer_model",
+        "rca_assembler_model",
+    )
+    @classmethod
+    def validate_model_name(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Model name cannot be empty.")
+
+        return value
+
+    @field_validator(
+        "issue_summary_provider",
+        "root_cause_provider",
+        "impact_analysis_provider",
+        "affected_module_provider",
+        "quality_gate_provider",
+        "corrective_action_provider",
+        "preventive_action_provider",
+        "owner_review_provider",
+        "rca_reviewer_provider",
+        "rca_assembler_provider",
+    )
+    @classmethod
+    def validate_provider(cls, value: str) -> str:
+        value = value.strip().lower()
+
+        allowed_providers = {"gemini", "openai"}
+
+        if value not in allowed_providers:
             raise ValueError(
-                f"Invalid GEMINI_MODEL '{value}'. "
-                f"Allowed values: {sorted(allowed_models)}"
+                f"Provider must be one of: {sorted(allowed_providers)}"
+            )
+
+        return value
+
+    @field_validator("openai_reasoning_effort")
+    @classmethod
+    def validate_openai_reasoning_effort(cls, value: str) -> str:
+        value = value.strip().lower()
+
+        allowed_values = {
+            "minimal",
+            "low",
+            "medium",
+            "high",
+        }
+
+        if value not in allowed_values:
+            raise ValueError(
+                f"OPENAI_REASONING_EFFORT must be one of: {sorted(allowed_values)}"
             )
 
         return value
@@ -284,10 +303,7 @@ class Settings(BaseSettings):
 
         return value
 
-    # =========================================================================
-    # HELPER PROPERTIES
-    # =========================================================================
-
+    # Helper Properties
     @property
     def allowed_origins_list(self) -> list[str]:
         return [
@@ -305,20 +321,11 @@ class Settings(BaseSettings):
         return (
             self.api_key != "CHANGE_ME"
             and self.google_api_key != "CHANGE_ME"
+            and self.openai_api_key != "CHANGE_ME"
         )
 
     @property
     def api_auth_map(self) -> dict[str, set[str]]:
-        """
-        Builds header-to-allowed-keys mapping.
-
-        Example output:
-            {
-                "X-API-Key": {"main-key"},
-                "X-CLIENT-A-KEY": {"client-a-key-1", "client-a-key-2"},
-            }
-        """
-
         mapping: dict[str, set[str]] = {
             self.api_key_header.strip(): {self.api_key}
         }

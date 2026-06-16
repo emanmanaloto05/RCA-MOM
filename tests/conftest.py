@@ -65,6 +65,29 @@ def developer_data() -> DeveloperIssueData:
     return DeveloperIssueData(
         dev_status=Status.FOR_TESTING,
         pic_dev="Juan dela Cruz",
+
+        affected_component="ApprovalFlowService",
+
+        root_cause=(
+            "Approval flow cache was not refreshed after "
+            "workflow configuration updates."
+        ),
+
+        fix_applied=(
+            "Added approval flow refresh logic after "
+            "workflow configuration changes."
+        ),
+
+        verification_result=(
+            "QA verified approval buttons display correctly "
+            "after configuration changes."
+        ),
+
+        technical_evidence=(
+            "Application logs showed stale approval flow cache "
+            "before refresh logic was implemented."
+        ),
+
         dev_notes="Root cause traced to stale approval flow cache.",
     )
 

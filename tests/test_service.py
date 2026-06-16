@@ -1,12 +1,4 @@
 # tests/test_service.py
-"""
-Tests for agent_root/service.py
-
-Covers: extract_markdown_sections, _bool_to_pass_fail,
-        _resolve_consultant, RCAService.render_html,
-        RCAService.generate_html_file, RCAService.generate_pdf_file,
-        RCAService.generate_rca (full pipeline).
-"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -21,6 +13,7 @@ from agent_root.models import (
     QualityGateData,
     RCAInputModel,
     RCAOutputModel,
+    Status,
 )
 from agent_root.service import (
     RCAService,
@@ -33,9 +26,56 @@ from agent_root.service import (
 from tests.conftest import VALID_MARKDOWN
 
 
-# =============================================================================
-# extract_section
-# =============================================================================
+def _valid_dev_data(**overrides: Any) -> DeveloperIssueData:
+    return DeveloperIssueData(
+        affected_component=overrides.get(
+            "affected_component",
+            "ApprovalFlowService",
+        ),
+        root_cause=overrides.get(
+            "root_cause",
+            "Approval flow cache was not refreshed after setup changes.",
+        ),
+        fix_applied=overrides.get(
+            "fix_applied",
+            "Added approval flow refresh logic.",
+        ),
+        verification_result=overrides.get(
+            "verification_result",
+            "QA verified approval buttons now appear correctly.",
+        ),
+        technical_evidence=overrides.get(
+            "technical_evidence",
+            "Logs confirmed stale approval flow cache before the fix.",
+        ),
+        dev_status=overrides.get("dev_status"),
+        pic_dev=overrides.get("pic_dev"),
+        dev_resolved_on=overrides.get("dev_resolved_on"),
+        dev_end_date=overrides.get("dev_end_date"),
+        dev_notes=overrides.get("dev_notes"),
+    )
+
+
+def _valid_quality_gate(**overrides: Any) -> QualityGateData:
+    return QualityGateData(
+        validation_status=overrides.get(
+            "validation_status",
+            Status.VALIDATED,
+        ),
+        qa_status=overrides.get(
+            "qa_status",
+            Status.PASSED,
+        ),
+        fc_failed_testing=overrides.get("fc_failed_testing", 0),
+        existing_report=overrides.get("existing_report", False),
+        quality_gate_first_pass=overrides.get("quality_gate_first_pass"),
+        smoke_test_first_pass=overrides.get("smoke_test_first_pass"),
+        reopen_count=overrides.get("reopen_count", 0),
+        qa_validated_on=overrides.get("qa_validated_on"),
+        pic_qa=overrides.get("pic_qa"),
+        remarks=overrides.get("remarks"),
+    )
+
 
 class TestExtractSection:
     def test_extracts_body_under_heading(self) -> None:
@@ -78,10 +118,6 @@ class TestExtractSection:
         assert result == "Numbered match."
 
 
-# =============================================================================
-# extract_markdown_sections
-# =============================================================================
-
 class TestExtractMarkdownSections:
     def test_extracts_all_five_sections(self) -> None:
         sections = extract_markdown_sections(VALID_MARKDOWN)
@@ -98,8 +134,11 @@ class TestExtractMarkdownSections:
     def test_returns_dict_with_all_keys(self) -> None:
         sections = extract_markdown_sections("")
         assert set(sections.keys()) == {
-            "cause", "impact_analysis", "solution",
-            "preventive_action", "owner_review",
+            "cause",
+            "impact_analysis",
+            "solution",
+            "preventive_action",
+            "owner_review",
         }
 
     def test_handles_alias_headings(self) -> None:
@@ -135,10 +174,6 @@ class TestExtractMarkdownSections:
         assert "Reviewed by owner" in sections["owner_review"]
 
 
-# =============================================================================
-# bool_to_pass_fail
-# =============================================================================
-
 class TestBoolToPassFail:
     def test_true_returns_passed(self) -> None:
         assert bool_to_pass_fail(True) == "Passed"
@@ -150,41 +185,33 @@ class TestBoolToPassFail:
         assert bool_to_pass_fail(None) == "N/A"
 
 
-# =============================================================================
-# resolve_consultant
-# =============================================================================
-
 class TestResolveConsultant:
     def test_prefers_pic_dev(self) -> None:
-        dev = DeveloperIssueData(pic_dev="Dev Name")
-        qa  = QualityGateData(pic_qa="QA Name")
+        dev = _valid_dev_data(pic_dev="Dev Name")
+        qa = _valid_quality_gate(pic_qa="QA Name")
         assert resolve_consultant(dev, qa) == "Dev Name"
 
     def test_falls_back_to_pic_qa_when_dev_absent(self) -> None:
-        qa = QualityGateData(pic_qa="QA Name")
+        qa = _valid_quality_gate(pic_qa="QA Name")
         assert resolve_consultant(None, qa) == "QA Name"
 
     def test_returns_empty_string_when_both_absent(self) -> None:
         assert resolve_consultant(None, None) == ""
 
     def test_returns_empty_when_pic_dev_is_none(self) -> None:
-        dev = DeveloperIssueData(pic_dev=None)
+        dev = _valid_dev_data(pic_dev=None)
         assert resolve_consultant(dev, None) == ""
 
     def test_falls_back_to_qa_when_dev_has_no_name(self) -> None:
-        dev = DeveloperIssueData(pic_dev=None)
-        qa  = QualityGateData(pic_qa="QA Name")
+        dev = _valid_dev_data(pic_dev=None)
+        qa = _valid_quality_gate(pic_qa="QA Name")
         assert resolve_consultant(dev, qa) == "QA Name"
 
     def test_returns_empty_when_qa_pic_also_none(self) -> None:
-        dev = DeveloperIssueData(pic_dev=None)
-        qa  = QualityGateData(pic_qa=None)
+        dev = _valid_dev_data(pic_dev=None)
+        qa = _valid_quality_gate(pic_qa=None)
         assert resolve_consultant(dev, qa) == ""
 
-
-# =============================================================================
-# RCAService.render_html
-# =============================================================================
 
 class TestRenderHtml:
     def test_returns_html_string(
@@ -234,7 +261,6 @@ class TestRenderHtml:
         rca_input: RCAInputModel,
         rca_output: RCAOutputModel,
     ) -> None:
-        # pic_dev from conftest fixture is "Juan dela Cruz"
         html = RCAService.render_html(rca_input=rca_input, rca_output=rca_output)
         assert "Juan dela Cruz" in html
 
@@ -259,7 +285,6 @@ class TestRenderHtml:
         rca_input: RCAInputModel,
         rca_output: RCAOutputModel,
     ) -> None:
-        # quality_gate_first_pass=True in conftest → "Passed"
         html = RCAService.render_html(rca_input=rca_input, rca_output=rca_output)
         assert "Passed" in html
 
@@ -268,7 +293,6 @@ class TestRenderHtml:
         rca_input: RCAInputModel,
         rca_output: RCAOutputModel,
     ) -> None:
-        # pic_qa from conftest is "Maria Santos"
         html = RCAService.render_html(rca_input=rca_input, rca_output=rca_output)
         assert "Maria Santos" in html
 
@@ -302,14 +326,9 @@ class TestRenderHtml:
         rca_input: RCAInputModel,
         rca_output: RCAOutputModel,
     ) -> None:
-        # github_pr.owner_review from conftest is "Reviewed and approved by module owner."
         html = RCAService.render_html(rca_input=rca_input, rca_output=rca_output)
         assert "Reviewed and approved by module owner." in html
 
-
-# =============================================================================
-# RCAService.generate_html_file
-# =============================================================================
 
 class TestGenerateHtmlFile:
     def test_writes_html_file(
@@ -388,10 +407,6 @@ class TestGenerateHtmlFile:
         assert Path(path).exists()
 
 
-# =============================================================================
-# RCAService.generate_pdf_file
-# =============================================================================
-
 class TestGeneratePdfFile:
     @pytest.mark.asyncio
     async def test_calls_playwright_helper(self, tmp_path: Path) -> None:
@@ -442,17 +457,12 @@ class TestGeneratePdfFile:
         assert nested.exists()
 
 
-# =============================================================================
-# RCAService.generate_rca — full pipeline (all mocked)
-# =============================================================================
-
 class TestGenerateRca:
-
     def _make_final_state(self, valid_markdown: str) -> dict[str, Any]:
         return {
-            "review_passed":    True,
-            "review_notes":     "All required sections present.",
-            "rca_output":       RCAOutputModel(
+            "review_passed": True,
+            "review_notes": "All required sections present.",
+            "rca_output": RCAOutputModel(
                 issue_id="EIL_TEST001",
                 markdown_rca=valid_markdown,
             ),
@@ -466,8 +476,7 @@ class TestGenerateRca:
         valid_markdown: str,
         tmp_path: Path,
     ) -> None:
-        final_state: dict[str, Any] = self._make_final_state(valid_markdown)
-
+        final_state = self._make_final_state(valid_markdown)
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = final_state
 
@@ -487,8 +496,7 @@ class TestGenerateRca:
         valid_markdown: str,
         tmp_path: Path,
     ) -> None:
-        final_state: dict[str, Any] = self._make_final_state(valid_markdown)
-
+        final_state = self._make_final_state(valid_markdown)
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = final_state
 
@@ -506,9 +514,9 @@ class TestGenerateRca:
         rca_input: RCAInputModel,
     ) -> None:
         final_state: dict[str, Any] = {
-            "review_passed":    False,
-            "review_notes":     "Missing sections: ## 3. Impact Analysis",
-            "rca_output":       None,
+            "review_passed": False,
+            "review_notes": "Missing sections: ## 3. Impact Analysis",
+            "rca_output": None,
             "generation_error": None,
         }
 
@@ -524,15 +532,13 @@ class TestGenerateRca:
         self,
         rca_input: RCAInputModel,
     ) -> None:
-        # Build a valid model, then overwrite markdown_rca with whitespace
-        # (Pydantic accepts min_length=1 with spaces; service strips and rejects)
         rca_out = RCAOutputModel(issue_id="EIL_TEST001", markdown_rca="x")
         rca_out.markdown_rca = "   "
 
         final_state: dict[str, Any] = {
-            "review_passed":    True,
-            "review_notes":     "All required sections present.",
-            "rca_output":       rca_out,
+            "review_passed": True,
+            "review_notes": "All required sections present.",
+            "rca_output": rca_out,
             "generation_error": None,
         }
 
@@ -575,9 +581,9 @@ class TestGenerateRca:
         rca_input: RCAInputModel,
     ) -> None:
         final_state: dict[str, Any] = {
-            "review_passed":    True,
-            "review_notes":     "All required sections present.",
-            "rca_output":       None,
+            "review_passed": True,
+            "review_notes": "All required sections present.",
+            "rca_output": None,
             "generation_error": None,
         }
 
@@ -606,9 +612,9 @@ class TestGenerateRca:
         rca_input: RCAInputModel,
     ) -> None:
         final_state: dict[str, Any] = {
-            "review_passed":    False,
-            "review_notes":     None,
-            "rca_output":       None,
+            "review_passed": False,
+            "review_notes": None,
+            "rca_output": None,
             "generation_error": "Gemini timed out",
         }
 
@@ -626,8 +632,7 @@ class TestGenerateRca:
         valid_markdown: str,
         tmp_path: Path,
     ) -> None:
-        final_state: dict[str, Any] = self._make_final_state(valid_markdown)
-
+        final_state = self._make_final_state(valid_markdown)
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = final_state
 

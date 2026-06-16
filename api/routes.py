@@ -1,4 +1,3 @@
-# api/routes.py
 from __future__ import annotations
 
 import logging
@@ -11,6 +10,7 @@ from agent_root.models import RCAInputModel, RCAOutputModel
 from agent_root.service import RCAService, RCAServiceError
 from api.dependencies import verify_api_key
 from common.rate_limit import limiter
+from common.utils import sanitize_issue_id
 from config.settings import settings
 
 logger = logging.getLogger("rca_generator.routes")
@@ -63,22 +63,23 @@ async def generate_rca(
     status_code=status.HTTP_200_OK,
 )
 async def download_rca_pdf(issue_id: str) -> FileResponse:
-    pdf_path = Path("outputs") / f"{issue_id}_rca.pdf"
+    safe_issue_id = sanitize_issue_id(issue_id)
+    pdf_path = Path("outputs") / f"{safe_issue_id}_rca.pdf"
 
     if not pdf_path.exists() or not pdf_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"PDF not found for issue {issue_id}.",
+            detail=f"PDF not found for issue {safe_issue_id}.",
         )
 
     logger.info(
         "RCA PDF download requested | issue_id=%s | path=%s",
-        issue_id,
+        safe_issue_id,
         pdf_path,
     )
 
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
-        filename=f"{issue_id}_rca.pdf",
+        filename=f"{safe_issue_id}_rca.pdf",
     )

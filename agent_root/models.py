@@ -8,84 +8,198 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ENUMS
+# ─────────────────────────────────────────────────────────────────────────────
+
 class IssueType(str, Enum):
-    ISSUE_ERROR = "Issue/Error"
-    FEATURE = "Feature"
-    ENHANCEMENT = "Enhancement"
-    ROADMAP = "Roadmap"
+    ISSUE_ERROR  = "Issue/Error"
+    FEATURE      = "Feature"
+    ENHANCEMENT  = "Enhancement"
+    ROADMAP      = "Roadmap"
 
 
 class Status(str, Enum):
-    OPEN = "Open"
-    ONGOING = "Ongoing"
-    CANCELLED = "Cancelled"
-    VALIDATED = "Validated"
-    FOR_TESTING = "For Testing"
-    FOR_DEPLOYMENT = "For Deployment"
-    CLOSED = "Closed"
-    PASSED = "Passed"
-    TAGGED_TO_DEV = "Tagged to Dev"
+    OPEN            = "Open"
+    ONGOING         = "Ongoing"
+    CANCELLED       = "Cancelled"
+    VALIDATED       = "Validated"
+    FOR_TESTING     = "For Testing"
+    FOR_DEPLOYMENT  = "For Deployment"
+    CLOSED          = "Closed"
+    PASSED          = "Passed"
+    TAGGED_TO_DEV   = "Tagged to Dev"
 
 
 class UrgencyLevel(str, Enum):
     U1_CRITICAL = "U1 - Critical"
-    U2_HIGH = "U2 - High"
-    U3_MEDIUM = "U3 - Medium"
-    U4_LOW = "U4 - Low"
+    U2_HIGH     = "U2 - High"
+    U3_MEDIUM   = "U3 - Medium"
+    U4_LOW      = "U4 - Low"
 
 
 class ImpactLevel(str, Enum):
     I1_CRITICAL = "I1 - Critical"
-    I2_HIGH = "I2 - High"
-    I3_MEDIUM = "I3 - Medium"
-    I4_LOW = "I4 - Low"
+    I2_HIGH     = "I2 - High"
+    I3_MEDIUM   = "I3 - Medium"
+    I4_LOW      = "I4 - Low"
 
 
 class PriorityLevel(str, Enum):
     P1_CRITICAL = "P1 - Critical"
-    P2_HIGH = "P2 - High"
-    P3_MEDIUM = "P3 - Medium"
-    P4_LOW = "P4 - Low"
+    P2_HIGH     = "P2 - High"
+    P3_MEDIUM   = "P3 - Medium"
+    P4_LOW      = "P4 - Low"
 
 
 class ApprovalStatus(str, Enum):
-    DRAFT = "Draft"
+    DRAFT      = "Draft"
     FOR_REVIEW = "For Review"
-    APPROVED = "Approved"
-    REJECTED = "Rejected"
+    APPROVED   = "Approved"
+    REJECTED   = "Rejected"
 
+
+class ProviderName(str, Enum):
+    """Supported LLM providers. Must match values accepted by get_llm_for_agent()."""
+    GEMINI = "gemini"
+    OPENAI = "openai"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION AGENT PROVIDER CONFIG
+#
+# Allows callers to override the provider and model for each RCA section
+# agent on a per-request basis. When omitted, graph.py falls back to the
+# per-section settings in config/settings.py, which in turn fall back to
+# the global Gemini singleton.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class SectionProviderConfig(BaseModel):
+    """
+    Per-section LLM provider override for a single RCA section agent.
+
+    Both fields must be supplied together — specifying only provider or
+    only model is rejected by the validator below.
+
+    Example (in RCAGenerationConfig):
+        {
+            "provider": "openai",
+            "model": "gpt-4o"
+        }
+    """
+    provider: ProviderName = Field(
+        ...,
+        description="LLM provider to use for this section ('gemini' or 'openai').",
+    )
+    model: str = Field(
+        ...,
+        min_length=1,
+        description="Model name string, e.g. 'gemini-2.5-flash' or 'gpt-4o'.",
+    )
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class RCAGenerationConfig(BaseModel):
+    """
+    Optional per-request overrides for which LLM provider and model each
+    section agent should use.
+
+    All fields are optional. Omitted sections fall back to the values in
+    config/settings.py (environment variables), which themselves fall back
+    to the global Gemini provider singleton.
+
+    This model is attached to RCAInputModel.generation_config so that API
+    callers can mix providers per section without changing .env — useful
+    for A/B testing, cost optimisation, or routing critical sections to a
+    more capable model.
+
+    Section keys map directly to the YAML section keys in prompts.yaml and
+    the state_output_key prefixes in graph.py:
+        issue_summary         → ## 1. Issue Summary
+        root_cause            → ## 2. Root Cause
+        impact_analysis       → ## 3. Impact Analysis
+        affected_module       → ## 4. Affected Module
+        quality_gate_findings → ## 5. Quality Gate Findings
+        corrective_action     → ## 6. Corrective Action
+        preventive_action     → ## 7. Preventive Action
+        owner_review          → ## 8. Owner Review
+    """
+    issue_summary:          Optional[SectionProviderConfig] = None
+    root_cause:             Optional[SectionProviderConfig] = None
+    impact_analysis:        Optional[SectionProviderConfig] = None
+    affected_module:        Optional[SectionProviderConfig] = None
+    quality_gate_findings:  Optional[SectionProviderConfig] = None
+    corrective_action:      Optional[SectionProviderConfig] = None
+    preventive_action:      Optional[SectionProviderConfig] = None
+    owner_review:           Optional[SectionProviderConfig] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    def get_provider(self, section_key: str) -> Optional[str]:
+        """
+        Returns the provider name string for the given section key,
+        or None if no override is configured for that section.
+
+        Args:
+            section_key: One of the eight section keys listed above.
+
+        Returns:
+            Provider name string (e.g. "gemini", "openai") or None.
+        """
+        cfg: Optional[SectionProviderConfig] = getattr(self, section_key, None)
+        return cfg.provider.value if cfg else None
+
+    def get_model(self, section_key: str) -> Optional[str]:
+        """
+        Returns the model name string for the given section key,
+        or None if no override is configured for that section.
+
+        Args:
+            section_key: One of the eight section keys listed above.
+
+        Returns:
+            Model name string (e.g. "gemini-2.5-flash", "gpt-4o") or None.
+        """
+        cfg: Optional[SectionProviderConfig] = getattr(self, section_key, None)
+        return cfg.model if cfg else None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CORE INPUT MODELS
+# ─────────────────────────────────────────────────────────────────────────────
 
 class TaskMonitoringData(BaseModel):
-    issue_logs_id: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-    product: str = Field(..., min_length=1)
-    client: str = Field(..., min_length=1)
-    issue_type: IssueType
-    issue_description: str = Field(..., min_length=1)
-    implement_status: Status
-    pre_condition: str = Field(..., min_length=1)
-    test_steps: str = Field(..., min_length=1)
-    expected_result: str = Field(..., min_length=1)
+    issue_logs_id:        str = Field(..., min_length=1)
+    title:                str = Field(..., min_length=1)
+    product:              str = Field(..., min_length=1)
+    client:               str = Field(..., min_length=1)
+    issue_type:           IssueType
+    issue_description:    str = Field(..., min_length=1)
+    implement_status:     Status
+    pre_condition:        str = Field(..., min_length=1)
+    test_steps:           str = Field(..., min_length=1)
+    expected_result:      str = Field(..., min_length=1)
     recommended_solution: Optional[str] = None
-    error_message: Optional[str] = None
-    urgency_level: UrgencyLevel
-    impact_level: ImpactLevel
-    priority_level: PriorityLevel
-    module: str = Field(..., min_length=1)
-    core_function: str = Field(..., min_length=1)
-    is_recurring: bool = False
+    error_message:        Optional[str] = None
+    urgency_level:        UrgencyLevel
+    impact_level:         ImpactLevel
+    priority_level:       PriorityLevel
+    module:               str = Field(..., min_length=1)
+    core_function:        str = Field(..., min_length=1)
+    is_recurring:         bool = False
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class GitHubPRData(BaseModel):
-    pr_number: Optional[int] = Field(default=None, gt=0)
-    pr_url: Optional[str] = None
-    branch_name: Optional[str] = None
-    affected_modules: list[str] = Field(default_factory=list)
-    fixed_summary: Optional[str] = None
-    prevention_steps: Optional[str] = None
-    owner_review: Optional[str] = None
+    pr_number:        Optional[int]       = Field(default=None, gt=0)
+    pr_url:           Optional[str]       = None
+    branch_name:      Optional[str]       = None
+    affected_modules: list[str]           = Field(default_factory=list)
+    fixed_summary:    Optional[str]       = None
+    prevention_steps: Optional[str]       = None
+    owner_review:     Optional[str]       = None
 
     @field_validator("pr_url")
     @classmethod
@@ -102,17 +216,51 @@ class GitHubPRData(BaseModel):
 
 
 class DeveloperIssueData(BaseModel):
-    dev_status: Optional[Status] = None
-    pic_dev: Optional[str] = None
+    # ── Optional metadata fields ──────────────────────────────────────────────
+    dev_status:      Optional[Status]   = None
+    pic_dev:         Optional[str]      = None
     dev_resolved_on: Optional[datetime] = None
-    dev_end_date: Optional[datetime] = None
-    affected_component: Optional[str] = None
-    root_cause: Optional[str] = None
-    fix_applied: Optional[str] = None
-    verification_result: Optional[str] = None
-    dev_notes: Optional[str] = None
-    technical_evidence: Optional[str] = Field(
-        default=None,
+    dev_end_date:    Optional[datetime] = None
+
+    # ── Required technical fields ─────────────────────────────────────────────
+    # These five fields are now required (no longer Optional) so the AI is
+    # forced to work from real developer evidence rather than guessing.
+    # All requests must supply these to generate a meaningful RCA.
+    affected_component: str = Field(
+        ...,
+        min_length=3,
+        description=(
+            "The specific component, service, or class where the defect was found "
+            "(e.g. 'ApprovalFlowService', 'JobLevelValidationService')."
+        ),
+    )
+    root_cause: str = Field(
+        ...,
+        min_length=10,
+        description=(
+            "Developer's analysis of what caused the issue — what failed, "
+            "where it failed, and why it failed."
+        ),
+    )
+    fix_applied: str = Field(
+        ...,
+        min_length=10,
+        description=(
+            "Description of the exact change made to resolve the issue "
+            "(component, method, query, or configuration that was changed)."
+        ),
+    )
+    verification_result: str = Field(
+        ...,
+        min_length=10,
+        description=(
+            "QA or developer confirmation that the fix was verified and the "
+            "issue no longer reproduces (e.g. 'QA validated that Approve and "
+            "Reject buttons are now displayed correctly.')."
+        ),
+    )
+    technical_evidence: str = Field(
+        ...,
         min_length=10,
         description=(
             "Concrete technical evidence such as logs, error messages, stack traces, "
@@ -121,51 +269,81 @@ class DeveloperIssueData(BaseModel):
         ),
     )
 
+    # ── Optional supplementary field ─────────────────────────────────────────
+    dev_notes: Optional[str] = None
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class QualityGateData(BaseModel):
-    validation_status: Optional[Status] = None
-    fc_failed_testing: int = Field(default=0, ge=0)
-    existing_report: bool = False
+    # ── Required QA status fields ─────────────────────────────────────────────
+    # validation_status and qa_status are now required (no longer Optional)
+    # so every QA gate submission carries an explicit pass/fail verdict.
+    validation_status: Status = Field(
+        ...,
+        description=(
+            "Final validation status assigned by QA "
+            "(e.g. 'Validated', 'For Testing', 'Closed')."
+        ),
+    )
+    qa_status: Status = Field(
+        ...,
+        description=(
+            "Overall QA verdict for the fix "
+            "(e.g. 'Passed', 'Open', 'For Testing')."
+        ),
+    )
+
+    # ── Counters and flags ────────────────────────────────────────────────────
+    fc_failed_testing:       int           = Field(default=0, ge=0)
+    existing_report:         bool          = False
     quality_gate_first_pass: Optional[bool] = None
-    smoke_test_first_pass: Optional[bool] = None
-    reopen_count: int = Field(default=0, ge=0)
-    qa_status: Optional[Status] = None
+    smoke_test_first_pass:   Optional[bool] = None
+    reopen_count:            int           = Field(default=0, ge=0)
+
+    # ── Optional QA metadata ──────────────────────────────────────────────────
     qa_validated_on: Optional[datetime] = None
-    pic_qa: Optional[str] = None
-    remarks: Optional[str] = None
+    pic_qa:          Optional[str]      = None
+    remarks:         Optional[str]      = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class Attachment(BaseModel):
-    filename: str = Field(..., min_length=1)
-    file_path: str = Field(..., min_length=1)
+    filename:     str           = Field(..., min_length=1)
+    file_path:    str           = Field(..., min_length=1)
     content_type: Optional[str] = None
-    description: Optional[str] = None
+    description:  Optional[str] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class RCAApprovalData(BaseModel):
-    prepared_by: Optional[str] = None
-    reviewed_by_dev: Optional[str] = None
-    validated_by_qa: Optional[str] = None
+    prepared_by:       Optional[str] = None
+    reviewed_by_dev:   Optional[str] = None
+    validated_by_qa:   Optional[str] = None
     approved_by_owner: Optional[str] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TOP-LEVEL INPUT / OUTPUT MODELS
+# ─────────────────────────────────────────────────────────────────────────────
+
 class RCAInputModel(BaseModel):
-    task_monitoring_data: TaskMonitoringData
-    github_pr: Optional[GitHubPRData] = None
-    developer_issue_data: Optional[DeveloperIssueData] = None
-    quality_gate_data: Optional[QualityGateData] = None
-    approval_data: Optional[RCAApprovalData] = None
+    task_monitoring_data:  TaskMonitoringData
+    github_pr:             Optional[GitHubPRData]        = None
+    developer_issue_data:  Optional[DeveloperIssueData]  = None
+    quality_gate_data:     Optional[QualityGateData]     = None
+    approval_data:         Optional[RCAApprovalData]     = None
     attachments: list[Attachment] = Field(
         default_factory=lambda: []
     )
+    
+    # Per-request section agent provider/model overrides.
+    # Omit entirely to use the defaults from config/settings.py.
+    generation_config: Optional[RCAGenerationConfig] = None
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -183,7 +361,7 @@ class RCAInputModel(BaseModel):
                         "test_steps": "1. File a Disciplinary Action record.\n2. Update the Approval Flow Setup after the DA record is created.\n3. Log in as the assigned approver.\n4. Open the existing DA record.\n5. Verify whether the Approve and Reject buttons are displayed.",
                         "expected_result": "The approver should see the Approve and Reject buttons based on the latest approval flow configuration.",
                         "recommended_solution": "Ensure that existing Disciplinary Action records reload or refresh the latest approval flow configuration after approval-flow setup changes.",
-                        "error_message": "Not available.",
+                        "error_message": None,
                         "urgency_level": "U4 - Low",
                         "impact_level": "I4 - Low",
                         "priority_level": "P4 - Low",
@@ -232,6 +410,10 @@ class RCAInputModel(BaseModel):
                         "approved_by_owner": "Module Owner",
                     },
                     "attachments": [],
+                    "generation_config": {
+                        "root_cause": {"provider": "openai", "model": "gpt-4o"},
+                        "corrective_action": {"provider": "openai", "model": "gpt-4o"},
+                    },
                 },
                 {
                     "task_monitoring_data": {
@@ -246,7 +428,7 @@ class RCAInputModel(BaseModel):
                         "test_steps": "1. Create an application manually with Job Level data.\n2. Import an application record with Job Level data.\n3. Compare validation behavior.",
                         "expected_result": "Manual and imported application records should follow the same Job Level validation rules.",
                         "recommended_solution": "Standardize Job Level validation logic.",
-                        "error_message": "Not available.",
+                        "error_message": None,
                         "urgency_level": "U2 - High",
                         "impact_level": "I2 - High",
                         "priority_level": "P2 - High",
@@ -295,6 +477,7 @@ class RCAInputModel(BaseModel):
                         "approved_by_owner": "Recruitment Module Owner",
                     },
                     "attachments": [],
+                    "generation_config": None,
                 },
                 {
                     "task_monitoring_data": {
@@ -309,7 +492,7 @@ class RCAInputModel(BaseModel):
                         "test_steps": "1. File a late approved application.\n2. Run Adjustment Processing.\n3. Open Adjustment Log.\n4. Validate records.",
                         "expected_result": "Adjustment Log should only display records directly related to the processed adjustment.",
                         "recommended_solution": "Filter Adjustment Log output.",
-                        "error_message": "Not available.",
+                        "error_message": None,
                         "urgency_level": "U1 - Critical",
                         "impact_level": "I1 - Critical",
                         "priority_level": "P1 - Critical",
@@ -365,6 +548,11 @@ class RCAInputModel(BaseModel):
                             "description": "Sample Adjustment Log showing unnecessary entries before filtering correction.",
                         }
                     ],
+                    "generation_config": {
+                        "root_cause": {"provider": "gemini", "model": "gemini-2.5-flash"},
+                        "corrective_action": {"provider": "openai", "model": "gpt-4o"},
+                        "preventive_action": {"provider": "openai", "model": "gpt-4o"},
+                    },
                 },
                 {
                     "task_monitoring_data": {
@@ -379,7 +567,7 @@ class RCAInputModel(BaseModel):
                         "test_steps": "1. Assign employee to straight-time schedule.\n2. Generate attendance logs.\n3. Open Attendance Summary.\n4. Compare computed hours.",
                         "expected_result": "Work hours and absent hours should be computed correctly.",
                         "recommended_solution": "Correct Attendance Summary computation logic.",
-                        "error_message": "Not available.",
+                        "error_message": None,
                         "urgency_level": "U2 - High",
                         "impact_level": "I2 - High",
                         "priority_level": "P2 - High",
@@ -428,6 +616,7 @@ class RCAInputModel(BaseModel):
                         "approved_by_owner": "Timekeeping Module Owner",
                     },
                     "attachments": [],
+                    "generation_config": None,
                 },
             ]
         }
@@ -435,11 +624,11 @@ class RCAInputModel(BaseModel):
 
 
 class RCAOutputModel(BaseModel):
-    issue_id: str = Field(..., min_length=1)
-    markdown_rca: str = Field(..., min_length=1)
-    pdf_file_path: Optional[str] = None
+    issue_id:        str            = Field(..., min_length=1)
+    markdown_rca:    str            = Field(..., min_length=1)
+    pdf_file_path:   Optional[str]  = None
     approval_status: ApprovalStatus = ApprovalStatus.DRAFT
-    generated_at: datetime = Field(
+    generated_at:    datetime       = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
 
@@ -447,11 +636,11 @@ class RCAOutputModel(BaseModel):
         str_strip_whitespace=True,
         json_schema_extra={
             "example": {
-                "issue_id": "EIL_2025000185",
-                "markdown_rca": "# Root Cause Analysis\n\n## 1. Issue Summary\n...\n\n## 2. Root Cause\n...",
-                "pdf_file_path": "outputs/EIL_2025000185_rca.pdf",
+                "issue_id":        "EIL_2025000185",
+                "markdown_rca":    "# Root Cause Analysis\n\n## 1. Issue Summary\n...\n\n## 2. Root Cause\n...",
+                "pdf_file_path":   "outputs/EIL_2025000185_rca.pdf",
                 "approval_status": "Draft",
-                "generated_at": "2026-06-10T12:00:00Z",
+                "generated_at":    "2026-06-10T12:00:00Z",
             }
         },
     )

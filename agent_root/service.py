@@ -24,6 +24,8 @@ from agent_root.models import (
     RCAInputModel,
     RCAOutputModel,
 )
+from common.utils import sanitize_issue_id
+from config.settings import settings
 
 logger = logging.getLogger("rca_generator.service")
 
@@ -227,6 +229,7 @@ def save_audit_log(
     generated_by: str,
     pdf_file_path: str | None,
     status: str,
+    model: str,
 ) -> None:
     audit_dir = Path("audit_logs")
     audit_dir.mkdir(parents=True, exist_ok=True)
@@ -238,6 +241,8 @@ def save_audit_log(
         "generated_by": generated_by,
         "pdf_file_path": pdf_file_path,
         "status": status,
+        "model": model,
+        "prompt_version": "prompts.yaml",
     }
 
     audit_file = audit_dir / f"{issue_id}.json"
@@ -265,7 +270,9 @@ class RCAService:
     async def generate_rca(cls, rca_input: RCAInputModel) -> RCAOutputModel:
         cleanup_old_outputs()
 
-        issue_id = rca_input.task_monitoring_data.issue_logs_id
+        issue_id = sanitize_issue_id(
+            rca_input.task_monitoring_data.issue_logs_id
+        )
 
         if not issue_id.strip():
             raise RCAServiceError("Issue ID is required for RCA generation.")
@@ -371,6 +378,7 @@ class RCAService:
             generated_by="RCA Generator",
             pdf_file_path=pdf_file_path,
             status=rca_output.approval_status.value,
+            model=settings.gemini_model,
         )
 
         logger.info(
@@ -390,7 +398,9 @@ class RCAService:
     ) -> str:
         cls.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-        issue_id = rca_input.task_monitoring_data.issue_logs_id
+        issue_id = sanitize_issue_id(
+            rca_input.task_monitoring_data.issue_logs_id
+        )
         output_path = cls.OUTPUT_DIR / f"{issue_id}_rca.html"
 
         html_content = cls.render_html(

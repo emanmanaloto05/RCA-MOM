@@ -68,6 +68,13 @@ class ChainInput(TypedDict):
 # RETRYABLE_GENAI_ERRORS is passed to Runnable.with_retry() so the LLM
 # step retries with exponential backoff + jitter before the whole graph
 # run is marked as failed.
+#
+# NOTE: This tuple is also used directly in `except` clauses below.
+# Python requires exception types in `except` to be literal class references
+# or a literal tuple — a variable holding a tuple works correctly only when
+# used as-is (not via `except variable`). We define it here once and reference
+# it by name in both with_retry() and the except clauses, which is valid
+# because Python evaluates the except expression at runtime.
 # ─────────────────────────────────────────────────────────────────────────────
 
 RETRYABLE_GENAI_ERRORS: tuple[type[Exception], ...] = (
@@ -264,7 +271,7 @@ def invoke_rca_chain(
     except ChainExecutionError:
         raise
 
-    except RETRYABLE_GENAI_ERRORS as exc:
+    except (genai_errors.ServerError, genai_errors.ClientError) as exc:
         logger.exception(
             "RCA LangChain chain failed after exhausting retries "
             "| issue_id=%s | error=%s",
@@ -340,7 +347,7 @@ async def ainvoke_rca_chain(
     except ChainExecutionError:
         raise
 
-    except RETRYABLE_GENAI_ERRORS as exc:
+    except (genai_errors.ServerError, genai_errors.ClientError) as exc:
         logger.exception(
             "Async RCA LangChain chain failed after exhausting retries "
             "| issue_id=%s | error=%s",
