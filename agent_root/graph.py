@@ -214,11 +214,8 @@ _FORBIDDEN_PHRASES: list[str] = [
     "could be",
     "might be",
     "possibly",
-    "further investigation",
     "it seems",
     "it appears",
-    "cannot be precisely determined",
-    "not enough information",
 ]
 
 _WEAK_PLACEHOLDERS: list[str] = [
