@@ -5,11 +5,16 @@
     <title>Minutes of Meeting</title>
 
     <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
         body {
             font-family: "Times New Roman", serif;
             font-size: 12px;
             margin: 40px;
-            color: #000;
+            color: #000000;
         }
 
         .header {
@@ -19,10 +24,9 @@
             margin-bottom: 20px;
         }
 
-        .logo {
-            font-size: 42px;
-            font-weight: bold;
-            font-style: italic;
+        .logo img {
+            width: 200px;
+            height: auto;
         }
 
         .company-info {
@@ -34,7 +38,7 @@
         h1 {
             text-align: center;
             font-size: 16px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
 
         table {
@@ -43,10 +47,17 @@
             margin-bottom: 25px;
         }
 
-        td, th {
-            border: 1px solid #999;
-            padding: 8px;
+        td,
+        th {
+            border: 1px solid #999999;
+            padding: 10px;
             vertical-align: top;
+            white-space: pre-line;
+        }
+
+        th {
+            font-weight: bold;
+            text-align: center;
         }
 
         .label {
@@ -62,10 +73,52 @@
 
         .section-title {
             font-weight: bold;
+            width: 15%;
         }
 
-        ul {
-            margin-top: 4px;
+        .action-column {
+            width: 58%;
+        }
+
+        .status-column {
+            width: 10%;
+            text-align: center;
+        }
+
+        .pic-column {
+            width: 17%;
+            text-align: center;
+        }
+
+        .action-cell {
+            line-height: 1.35;
+        }
+
+        .bullet-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .bullet-list li {
+            margin-bottom: 4px;
+            line-height: 1.35;
+        }
+
+        .task-item {
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .highlight {
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 10px;
+            color: #555;
+            line-height: 1.5;
         }
     </style>
 </head>
@@ -73,13 +126,18 @@
 <body>
 
     <div class="header">
-        <div class="logo">direc</div>
+
+        <div class="logo">
+            <img src="../assets/direc_logo.png" alt="Direc Logo">
+        </div>
+
         <div class="company-info">
             4F, Victoria One Bldg. 1670 Quezon Ave.<br>
             South Triangle, Quezon City, Philippines<br>
             www.direcbusiness.com<br>
             (02) 8555 1547
         </div>
+
     </div>
 
     <h1>Minutes of Meeting</h1>
@@ -89,67 +147,90 @@
             <td class="label">Company Name</td>
             <td colspan="3">{{ company_name }}</td>
         </tr>
+
         <tr>
             <td class="label">Subject</td>
             <td colspan="3">{{ subject }}</td>
         </tr>
+
         <tr>
             <td class="label">Date</td>
             <td>{{ date }}</td>
             <td class="label">Meeting Attendees</td>
-            <td>{{ attendees }}</td>
+            <td class="action-cell">{{ attendees | safe }}</td>
         </tr>
+
         <tr>
             <td class="label">Time</td>
             <td>{{ time }}</td>
             <td class="label">Agenda / Objective</td>
-            <td>{{ agenda }}</td>
+            <td class="action-cell">{{ agenda | safe }}</td>
         </tr>
     </table>
 
     <table>
         <tr class="green-header">
             <th>ITEM</th>
-            <th>ACTION</th>
-            <th>STATUS</th>
-            <th>PIC & TARGET DATE</th>
+            <th class="action-column">ACTION</th>
+            <th class="status-column">STATUS</th>
+            <th class="pic-column">PIC & TARGET DATE</th>
         </tr>
 
         <tr>
             <td class="section-title">Discussion Points</td>
-            <td>{{ summary }}</td>
-            <td>Generated</td>
-            <td>AI Generated</td>
+            <td class="action-cell">{{ summary | safe }}</td>
+            <td class="status-column">Generated</td>
+            <td class="pic-column">AI Generated</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Decisions Made</td>
+            <td class="action-cell">{{ decisions_made | safe }}</td>
+            <td class="status-column">For Review</td>
+            <td class="pic-column">Concerned PIC</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Action Items</td>
+            <td class="action-cell">{{ tasks | safe }}</td>
+            <td class="status-column">Open</td>
+            <td class="pic-column">To be assigned</td>
         </tr>
 
         <tr>
             <td class="section-title">Owners</td>
-            <td>{{ owners }}</td>
-            <td>For Review</td>
-            <td>{{ owners }}</td>
+            <td class="action-cell">{{ owners | safe }}</td>
+            <td class="status-column">For Review</td>
+            <td class="pic-column">Concerned PIC</td>
         </tr>
 
         <tr>
-            <td class="section-title">Tasks</td>
-            <td>{{ tasks }}</td>
-            <td>For Review</td>
-            <td>To be assigned</td>
-        </tr>
-
-        <tr>
-            <td class="section-title">Blockers</td>
-            <td>{{ blockers }}</td>
-            <td>Pending</td>
-            <td>Concerned Team</td>
+            <td class="section-title">Risks / Issues / Blockers</td>
+            <td class="action-cell">{{ blockers | safe }}</td>
+            <td class="status-column">Pending</td>
+            <td class="pic-column">Concerned Team</td>
         </tr>
 
         <tr>
             <td class="section-title">Follow-ups</td>
-            <td>{{ followups }}</td>
-            <td>Pending</td>
-            <td>Next Meeting</td>
+            <td class="action-cell">{{ followups | safe }}</td>
+            <td class="status-column">Pending</td>
+            <td class="pic-column">Next Meeting</td>
+        </tr>
+
+        <tr>
+            <td class="section-title">Meeting Outcome</td>
+            <td class="action-cell">{{ meeting_outcome | safe }}</td>
+            <td class="status-column">Generated</td>
+            <td class="pic-column">AI Generated</td>
         </tr>
     </table>
+
+    <div class="footer">
+        <div>Generated by AI Meeting Notes Summarizer</div>
+        <div>Generated Date: {{ generated_date }}</div>
+        <div>Document ID: {{ document_id }}</div>
+    </div>
 
 </body>
 </html>
