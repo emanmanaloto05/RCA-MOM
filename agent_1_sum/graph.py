@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-
+import time
 from jinja2 import Template
 from langgraph.graph import END
 from langgraph.graph import StateGraph
@@ -47,15 +47,48 @@ def transcribe_with_gemini(
         file=audio_path
     )
 
-    response = gemini_client.models.generate_content(
-        model=settings.GEMINI_TRANSCRIBE_MODEL,
-        contents=[
-            "Transcribe this meeting audio accurately. Return only the transcript text.",
-            uploaded_file,
-        ],
-    )
+    retry_delays = [3, 10]
 
-    return response.text.strip()
+    last_error = None
+
+    for attempt in range(1, 4):
+        try:
+            logger.info(
+                f"Gemini transcription attempt {attempt}/3"
+            )
+
+            response = gemini_client.models.generate_content(
+                model=settings.GEMINI_TRANSCRIBE_MODEL,
+                contents=[
+                    (
+                        "Transcribe this meeting audio accurately. "
+                        "Return only the transcript text. "
+                        "Do not summarize. Do not add comments."
+                    ),
+                    uploaded_file,
+                ],
+            )
+
+            return response.text.strip()
+
+        except Exception as error:
+            last_error = error
+
+            if attempt == 3:
+                break
+
+            wait_time = retry_delays[attempt - 1]
+
+            logger.warning(
+                f"Gemini transcription failed on attempt {attempt}. "
+                f"Retrying in {wait_time} seconds. Error: {error}"
+            )
+
+            time.sleep(wait_time)
+
+    raise RuntimeError(
+        f"Gemini transcription failed after 3 attempts: {last_error}"
+    )
 
 from agent_1_sum.services.pdf_generator import generate_pdf_from_html
 from agent_1_sum.chains import (
