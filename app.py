@@ -36,22 +36,55 @@ except Exception as exc:
     logger.warning("LangSmith client not initialized: %s", exc)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FIX — section key list kept in sync with agent_root/graph.py
+#
+# These MUST match the `section_key` strings passed to _invoke_section() in
+# graph.py exactly (e.g. "quality_gate_findings", not "quality_gate"), since
+# that's what the per-section settings attribute names
+# (f"{section_key}_provider") are derived from.
+# ─────────────────────────────────────────────────────────────────────────────
+_SECTION_KEYS: list[str] = [
+    "issue_summary",
+    "root_cause",
+    "impact_analysis",
+    "affected_module",
+    "quality_gate_findings",
+    "corrective_action",
+    "preventive_action",
+    "owner_review",
+]
+
+
 def _openai_is_used() -> bool:
-    providers = [
-        settings.issue_summary_provider,
-        settings.root_cause_provider,
-        settings.impact_analysis_provider,
-        settings.affected_module_provider,
-        settings.quality_gate_provider,
-        settings.corrective_action_provider,
-        settings.preventive_action_provider,
-        settings.owner_review_provider,
+    """
+    Determines whether any section's resolved provider is OpenAI, so startup
+    validation knows whether to initialize the OpenAI client.
+
+    FIX: previously read settings.<section>_provider directly, which raised
+    AttributeError whenever a per-section override field wasn't declared on
+    the Settings model (Pydantic only allows attribute access for declared
+    fields). This now uses getattr(..., None) — the same safe-access pattern
+    _invoke_section() in graph.py uses — and falls back to
+    settings.primary_provider (then "openai") to mirror graph.py's actual
+    provider-resolution chain, so this check stays accurate even when no
+    per-section overrides are configured at all.
+    """
+    per_section_providers = [
+        getattr(settings, f"{section_key}_provider", None)
+        for section_key in _SECTION_KEYS
     ]
 
-    return any(
-        provider.lower() == "openai"
-        for provider in providers
-    )
+    if any(
+        provider is not None and provider.lower() == "openai"
+        for provider in per_section_providers
+    ):
+        return True
+
+    # No per-section override resolved to OpenAI — fall back to the global
+    # default, exactly as _invoke_section() does: primary_provider, else "openai".
+    fallback_provider = settings.primary_provider or "openai"
+    return fallback_provider.lower() == "openai"
 
 
 def _validate_providers() -> None:

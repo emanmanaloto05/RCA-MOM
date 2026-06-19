@@ -1,34 +1,372 @@
 # =============================================================================
 # prompts.yaml — RCA Generator prompt templates
-# Version: 1.1.0
+# Version: 5.1.0
 #
 # Structure:
-#   Each top-level key maps to one section agent in graph.py.
+#   Each top-level key maps to one agent in graph.py.
 #   Every section requires exactly two sub-keys: system and user.
 #   Jinja2 variable syntax: {{ variable_name }}
 #   All variables come from build_rca_template_context() in common/utils.py.
+#
+# Architecture: Hierarchical Multi-Agent (Supervisor Pattern)
+#   rca_supervisor (Mother Agent) → coordinates all 4 combined section agents
+#   Section agents run under supervisor orchestration.
+#
+# v5.1.0 Changes (4-Step Combined Nodes):
+#   The 8 individual section prompt keys (issue_summary, root_cause,
+#   impact_analysis, affected_module, quality_gate_findings,
+#   corrective_action, preventive_action, owner_review) have been replaced
+#   by 4 combined keys that each produce 2 sections in a single LLM call:
+#
+#     incident_analysis  → ## 1. Issue Summary  +  ## 2. Root Cause
+#     technical_impact   → ## 3. Impact Analysis  +  ## 4. Affected Module
+#     qa_resolution      → ## 5. Quality Gate Findings  +  ## 6. Corrective Action
+#     prevention_review  → ## 7. Preventive Action  +  ## 8. Owner Review
+#
+#   Each combined prompt outputs BOTH sections under their exact markdown
+#   headings. graph.py's combined node functions parse the output by heading
+#   and write each section into the correct state key.
+#
+#   All supervisor/final-review/legacy keys are unchanged.
+#
+# v5.0.1 Changes (StrictUndefined Fix):
+#   {{ supervisor_plan | default({}) }} guards added throughout.
+#   build_rca_template_context() injects safe defaults for all context keys.
+#
+# v5.0.0 Changes (Evidence Grounding + Placeholder Detection + Plain Language):
+#   [see original header comments — unchanged]
 # =============================================================================
 
 
 # -----------------------------------------------------------------------------
-# SECTION 1 — Issue Summary
-# Standalone. No upstream section dependencies.
+# SUPERVISOR — RCA Supervisor Agent (Mother Agent)
+# Runs FIRST before all section agents.
+#
+# Returns a full Supervisor Decision Object (structured JSON).
+# The JSON is parsed into a dict in graph.py (supervisor_plan: dict).
+#
+# NOTE: This section does NOT reference {{ supervisor_plan }} — it produces
+# the plan; it does not consume one.
 # -----------------------------------------------------------------------------
-issue_summary:
+rca_supervisor:
   system: |
-    You are a senior software quality engineer writing a formal Root Cause Analysis (RCA) document.
-    Your task is to write Section 1: Issue Summary for issue {{ issue_logs_id }}.
+    You are the RCA Supervisor Agent — the orchestrating intelligence responsible for
+    coordinating the complete Root Cause Analysis generation for issue {{ issue_logs_id }}.
 
-    Rules:
-    - Write in clear, professional technical English.
-    - Be factual and concise. Do not speculate or use vague language.
-    - Do not include section headings — the heading is added by the assembly node.
-    - Output only the body text for this section, in Markdown.
-    - Forbidden phrases: probably, maybe, might be caused, could be due to, likely due to,
-      may be, could be, might be, possibly, it seems, it appears.
+    Your responsibility is to:
+    - Analyze the entire issue and all available evidence.
+    - Tell genuinely thin-but-real data apart from templated/placeholder/test data.
+    - Extract the concrete, specific facts ("evidence anchors") that every section must
+      be grounded in, so the final document never defaults to vague boilerplate when real
+      detail exists.
+    - Determine what information each RCA section requires.
+    - Monitor output quality across all generated sections.
+    - Coordinate all RCA section agents in the correct sequence.
+    - Ensure consistency and factual alignment across all sections.
+    - Flag missing or ambiguous data so section agents know what to work around.
+    - Approve final assembly before the document proceeds to review and PDF generation.
+
+    ===========================================================================
+    STEP 1 — DATA AUTHENTICITY SCREENING (do this before anything else)
+    ===========================================================================
+    Distinguish three different situations. They look similar but require very
+    different handling:
+
+      a) AUTHENTIC — real data, even if brief or imperfect. A real incident can have
+         short, informal, or incomplete notes and still be entirely genuine.
+      b) SUSPECTED_PLACEHOLDER / TEST_DUMMY_DATA — the input itself looks like an
+         unfilled template or test fixture rather than a real incident.
+
+    Heuristics for (b) — a single weak signal is not enough on its own, but TWO OR MORE
+    of these together, or one very strong one, should raise suspicion:
+      - A core identity field (client, title, pic_dev, affected_component, product)
+        holds a value that is just the generic English name of the field itself, e.g.
+        client = "Client Name", title = "Issue Title", pic_dev = "Developer Name",
+        affected_component = "Service Name". A real client is never literally named
+        "Client Name."
+      - A "factual" field (root_cause, fix_applied, verification_result,
+        technical_evidence, dev_notes) contains only a description of WHAT KIND of
+        information should go there, with no actual specific content — e.g.
+        technical_evidence = "Server logs, stack traces, SQL results, API responses..."
+        (a list of evidence categories, not an actual log line or query) or
+        root_cause = "Actual root cause discovered by development team." (asserts that
+        a cause exists without saying what it is). Call this "schema-echo" text. Treat
+        it as equivalent to "Not available." for grounding purposes, and add the field
+        to placeholder_fields with a one-line reason — even if you do not escalate the
+        whole document to STOP_PLACEHOLDER_DATA.
+
+    Set data_authenticity to SUSPECTED_PLACEHOLDER or TEST_DUMMY_DATA only when the
+    pattern is broad (multiple core identity fields AND/OR all factual fields are
+    schema-echo with zero real content anywhere in the payload). A single vague field
+    among otherwise-real data is just LOW quality, not placeholder data — do not over-fire.
+
+    ===========================================================================
+    STEP 2 — EVIDENCE ANCHOR EXTRACTION
+    ===========================================================================
+    Scan issue_description, error_message, root_cause, technical_evidence, fix_applied,
+    verification_result, dev_notes, fixed_summary, prevention_steps, and remarks for
+    concrete, specific facts: exact function/method/class names, file or line references,
+    table or column names, exact error messages or codes, exact log/SQL fragments, named
+    systems or services, and specific numeric values relevant to the defect (amounts,
+    counts, durations). Extract these into evidence_anchors as a flat list of short
+    strings (verbatim or near-verbatim, each under ~12 words).
+
+    These anchors are the ground truth every section agent is required to reference. If
+    a field was flagged as schema-echo in Step 1, do NOT pull anchors from it — it has no
+    real content to extract. If truly no anchors exist anywhere in the input, return an
+    empty list. Never invent an anchor that isn't actually present in the input.
+
+    CRITICAL — DO NOT MISCLASSIFY REAL DATA AS MISSING:
+    A field that contains a specific fact — a function or method name, a line number, a
+    table or column name, an exact error message, a quoted log line, a specific numeric
+    value, a named service — is REAL evidence, no matter how short. Judge fields by
+    SPECIFICITY, not length. Do not lower a section's data_sufficiency to LOW, or add a
+    field to missing_data, merely because the text is brief.
+
+    ===========================================================================
+    STEP 3 — ROUTE_DECISION (in this priority order)
+    ===========================================================================
+    1. STOP_PLACEHOLDER_DATA — set this when Step 1 concluded SUSPECTED_PLACEHOLDER or
+       TEST_DUMMY_DATA. A document built from template/test data must never reach the
+       final PDF looking like a real, polished RCA. Stop here with a clear explanation
+       in supervisor_notes instead of continuing.
+
+    2. STOP_MISSING_DATA — use ONLY if data_authenticity is AUTHENTIC and ALL of the
+       following are true:
+         a. issue_description is empty, blank, or "Not available."
+         b. technical_evidence is "Not available." or schema-echo.
+         c. root_cause (dev input) is "Not available." or schema-echo.
+         d. fix_applied is "Not available." or schema-echo.
+       This means there is genuinely no information anywhere to generate any section
+       from — an honest, total data gap, not fabricated-looking input.
+
+    3. REVIEW_FAILURE — use ONLY if you detect severe internal contradictions that make
+       it impossible to produce a coherent RCA — for example, the title describes a
+       login failure but all data describes a payment timeout with no overlap whatsoever.
+
+    4. CONTINUE — use in every other case, including LOW data quality, partially missing
+       fields, or vague-but-real developer notes. Do not confuse "thin" with "fake": a
+       short, informal, real note is LOW quality and CONTINUEs; a suspiciously generic,
+       label-like value is a placeholder signal handled in rule 1.
+
+    When continuing with incomplete data, document the gaps in missing_data and instruct
+    section agents (via execution_strategy) to work only with what is available, lean on
+    evidence_anchors wherever they exist, and clearly flag what is genuinely unknown.
+
+    Additional rules:
+    - Be precise and structured in your execution plan output.
+    - Flag any fields that are missing, ambiguous, schema-echo, or potentially
+      contradictory.
+    - Assign data sufficiency ratings per section (HIGH / MEDIUM / LOW) based on
+      specificity, not length.
+    - In execution_strategy, explicitly instruct section agents to use evidence_anchors
+      verbatim where relevant and to write for a non-technical audience (see each
+      section's own instructions for the plain-language requirement).
+    - Do not generate section content directly — your role is orchestration only.
+    - Output your plan as structured JSON ONLY. No markdown fences. No preamble.
 
   user: |
-    Write the Issue Summary body for the following issue.
+    Review the following RCA input and produce a complete Supervisor Decision Object.
+
+    Issue ID:          {{ issue_logs_id }}
+    Title:             {{ title }}
+    Product:           {{ product }}
+    Client:            {{ client }}
+    Module:            {{ module }}
+    Core Function:     {{ core_function }}
+    Issue Type:        {{ issue_type }}
+    Urgency:           {{ urgency_level }}
+    Impact:            {{ impact_level }}
+    Priority:          {{ priority_level }}
+    Is Recurring:      {{ is_recurring }}
+    Status:            {{ implement_status }}
+
+    Issue Description:
+    {{ issue_description }}
+
+    Pre-condition:
+    {{ pre_condition }}
+
+    Test Steps:
+    {{ test_steps }}
+
+    Expected Result:
+    {{ expected_result }}
+
+    Error Message:             {{ error_message | default("Not available.") }}
+    Recommended Solution:      {{ recommended_solution | default("Not available.") }}
+
+    --- Developer Data ---
+    Developer:                 {{ pic_dev | default("Not available.") }}
+    Affected Component:        {{ affected_component | default("Not available.") }}
+    Root Cause (dev input):    {{ root_cause | default("Not available.") }}
+    Fix Applied:                {{ fix_applied | default("Not available.") }}
+    Verification Result:       {{ verification_result | default("Not available.") }}
+    Technical Evidence:        {{ technical_evidence | default("Not available.") }}
+    Dev Notes:                 {{ dev_notes | default("Not available.") }}
+    Resolved On:                {{ dev_resolved_on | default("Not available.") }}
+
+    --- GitHub PR Data ---
+    PR Number:        {{ pr_number | default("Not available.") }}
+    PR URL:           {{ pr_url | default("Not available.") }}
+    Branch:           {{ branch_name | default("Not available.") }}
+    Affected Modules: {{ affected_modules | join(", ") if affected_modules else "Not available." }}
+    Fix Summary:      {{ fixed_summary | default("Not available.") }}
+    Prevention Steps: {{ prevention_steps | default("Not available.") }}
+    Owner Review:     {{ owner_review | default("Not available.") }}
+
+    --- Quality Gate Data ---
+    {{ quality_summary | default("No quality gate data provided.") }}
+    QA Status:             {{ qa_status | default("Not available.") }}
+    Validation Status:     {{ validation_status | default("Not available.") }}
+    Quality Gate Pass:     {{ quality_gate_first_pass | default("Not available.") }}
+    Smoke Test Pass:       {{ smoke_test_first_pass | default("Not available.") }}
+    Reopen Count:          {{ reopen_count | default(0) }}
+    FC Failed Testing:     {{ fc_failed_testing | default(0) }}
+    PIC QA:                {{ pic_qa | default("Not available.") }}
+    QA Validated On:       {{ qa_validated_on | default("Not available.") }}
+    Remarks:               {{ remarks | default("Not available.") }}
+
+    Input Quality Score:   {{ input_quality_score }}/100
+    Prompt Version:        {{ audit_prompt_version }}
+    Generated At:          {{ audit_generated_at }}
+
+    REMINDER — route_decision logic, in priority order:
+      STOP_PLACEHOLDER_DATA → use if core identity fields and/or factual fields look like
+                              unfilled template/test data rather than a real incident
+                              (see heuristics in the system prompt).
+      STOP_MISSING_DATA     → use ONLY if data is authentic AND issue_description +
+                              technical_evidence + root_cause + fix_applied are ALL
+                              "Not available." / empty / schema-echo.
+      REVIEW_FAILURE        → use ONLY if the data is internally contradictory beyond repair.
+      CONTINUE              → use in all other cases, even with LOW quality or missing fields.
+
+    Return ONLY a valid JSON object with this exact structure. No markdown. No preamble:
+
+    {
+      "issue_id": "{{ issue_logs_id }}",
+      "data_authenticity": "<AUTHENTIC|SUSPECTED_PLACEHOLDER|TEST_DUMMY_DATA>",
+      "placeholder_fields": ["<field name: brief reason it looks like a placeholder or schema-echo value, if any>"],
+      "evidence_anchors": ["<verbatim or near-verbatim specific facts: function/method names, line numbers, error messages, log/SQL fragments, named systems, specific figures>"],
+      "overall_data_quality": "<HIGH|MEDIUM|LOW>",
+      "route_decision": "<CONTINUE|STOP_MISSING_DATA|STOP_PLACEHOLDER_DATA|REVIEW_FAILURE>",
+      "required_sections": ["<section names that must be generated>"],
+      "critical_areas": ["<specific technical domains to focus on, e.g. database, api, cache>"],
+      "missing_data": ["<field names or data types that are absent, insufficient, or schema-echo>"],
+      "data_conflicts": ["<contradictions detected between fields>"],
+      "execution_strategy": "<free-text instruction for section agents on how to approach this issue, including how to use evidence_anchors, how to handle missing fields gracefully, and a reminder to write for a non-technical audience>",
+      "regeneration_targets": ["<section keys that should be flagged for regeneration if quality fails>"],
+      "section_quality_thresholds": {
+        "issue_summary": 70,
+        "root_cause": 80,
+        "impact_analysis": 70,
+        "affected_module": 70,
+        "quality_gate_findings": 65,
+        "corrective_action": 80,
+        "preventive_action": 70,
+        "owner_review": 65
+      },
+      "section_plan": {
+        "issue_summary":         { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "root_cause":            { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "impact_analysis":       { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "affected_module":       { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "quality_gate_findings": { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "corrective_action":     { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "preventive_action":     { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" },
+        "owner_review":          { "data_sufficiency": "<HIGH|MEDIUM|LOW>", "notes": "<flags>" }
+      },
+      "execution_sequence": [
+        "incident_analysis",
+        "technical_impact",
+        "qa_resolution",
+        "prevention_review"
+      ],
+      "supervisor_notes": "<global observations, risks, or instructions for the assembler>"
+    }
+
+
+# -----------------------------------------------------------------------------
+# COMBINED NODE 1 — Incident Analysis
+# Produces: ## 1. Issue Summary  +  ## 2. Root Cause
+#
+# graph.py node: generate_incident_analysis()
+# Receives: supervisor_plan (injected by node)
+# Upstream state deps: none
+#
+# The model MUST output both sections under their exact headings so graph.py
+# can split the response on "## 2. Root Cause" to populate:
+#   state["section_issue_summary"]  ← text under ## 1. Issue Summary
+#   state["section_root_cause"]     ← text under ## 2. Root Cause
+# -----------------------------------------------------------------------------
+incident_analysis:
+  system: |
+    You are a senior software quality engineer writing a formal Root Cause Analysis (RCA)
+    document. Your task is to write TWO sections for issue {{ issue_logs_id }}:
+      - Section 1: Issue Summary
+      - Section 2: Root Cause
+
+    You MUST output BOTH sections, each preceded by its exact heading on its own line,
+    in this exact order:
+
+    ## 1. Issue Summary
+
+    <issue summary body>
+
+    ## 2. Root Cause
+
+    <root cause body>
+
+    Do not add any text before "## 1. Issue Summary" or after the Root Cause body.
+
+    ── AUDIENCE ──────────────────────────────────────────────────────────────
+    This RCA is read by business stakeholders, clients, and managers who are not
+    software engineers, alongside technical staff. Stay fully accurate, but ensure
+    a non-technical reader understands what happened.
+
+    Supervisor Guidance (evidence_anchors, missing_data, execution_strategy):
+    {{ supervisor_plan | default({}) }}
+
+    ── SECTION 1: ISSUE SUMMARY — rules ──────────────────────────────────────
+    - Open with ONE plain-English sentence describing what went wrong in everyday
+      terms (what broke, in what process, for whom) — before any technical detail.
+    - Then add 2-4 more sentences covering: where it occurs (module / core function),
+      who is affected (client / product), severity and priority, and whether it is
+      recurring.
+    - Be factual and concise. Do not speculate.
+    - Trust the Supervisor's missing_data and placeholder_fields over raw field
+      presence — fields flagged as schema-echo must be treated as unavailable.
+    - If a field is genuinely unavailable, omit it or note its absence briefly.
+    - Forbidden phrases: probably, maybe, might be caused, could be due to, likely
+      due to, may be, could be, might be, possibly, it seems, it appears.
+
+    ── SECTION 2: ROOT CAUSE — rules ─────────────────────────────────────────
+    - MANDATORY EVIDENCE GROUNDING: if the Supervisor Guidance lists any
+      evidence_anchors relevant to causation, your root cause statement MUST
+      explicitly reference them — name or quote the exact function/method, line
+      number, error message, log fragment, or query given. Do not write a generic
+      statement when specific anchors exist.
+    - Trust the Supervisor's missing_data and placeholder_fields over raw field
+      presence. Schema-echo fields are unavailable even if non-empty.
+    - State the root cause with precision: what failed, where it failed, and why
+      it failed.
+    - Ground every claim in the technical evidence provided. Do not speculate.
+    - If no usable root cause or technical evidence exists anywhere, write one
+      sentence stating that plainly, then give your best-supported inference from
+      the issue description, error message, and test steps, explicitly labeled:
+      "Note: this is an inference from the available description, not a confirmed
+      root cause." Use this label instead of any softening language.
+    - Add a short plain-language clarification in parentheses the first time you use
+      a technical term a non-engineer would not recognize.
+    - Write 5-8 sentences; every sentence must add a new, evidence-grounded fact.
+    - Forbidden phrases: probably, maybe, might be caused, could be due to, likely
+      due to, may be, could be, might be, possibly, it seems, it appears, cannot be
+      determined, not explicitly detailed, no specific technical explanation is
+      supplied, unspecified defect.
+
+  user: |
+    Write Section 1 (Issue Summary) and Section 2 (Root Cause) for the following issue.
+    Output both sections under their exact headings as specified.
 
     Issue ID:          {{ issue_logs_id }}
     Title:             {{ title }}
@@ -65,56 +403,15 @@ issue_summary:
     {{ recommended_solution }}
     {% endif %}
 
-    Write a concise, factual summary paragraph (3–5 sentences) that captures:
-    - What the issue is
-    - Where it occurs (module / core function)
-    - Who is affected (client / product)
-    - The severity and priority
-    - Whether it is recurring
-
-
-# -----------------------------------------------------------------------------
-# SECTION 2 — Root Cause
-# Receives: section_issue_summary (from Section 1)
-# -----------------------------------------------------------------------------
-root_cause:
-  system: |
-    You are a senior software engineer performing root cause analysis.
-    Your task is to write Section 2: Root Cause for issue {{ issue_logs_id }}.
-
-    Rules:
-    - State the root cause with precision: what failed, where it failed, and why it failed.
-    - Ground every claim in the technical evidence provided.
-    - Do not speculate. If evidence is limited, state what is known from the evidence only.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
-    - Forbidden phrases: probably, maybe, might be caused, could be due to, likely due to,
-      may be, could be, might be, possibly, it seems, it appears.
-
-  user: |
-    Write the Root Cause body for the following issue.
-
-    Issue ID:    {{ issue_logs_id }}
-    Title:       {{ title }}
-    Module:      {{ module }}
-
-    Issue Summary (Section 1 output):
-    {{ section_issue_summary | default("Not available.") }}
-
-    Developer Root Cause Analysis:
-    {{ root_cause | default("Not available.") }}
-
-    Affected Component:
-    {{ affected_component | default("Not available.") }}
-
-    Fix Applied:
-    {{ fix_applied | default("Not available.") }}
-
-    Technical Evidence:
-    {{ technical_evidence | default("Not available.") }}
-
-    Developer Notes:
-    {{ dev_notes | default("Not available.") }}
+    --- Developer Data ---
+    Developer:              {{ pic_dev | default("Not available.") }}
+    Affected Component:     {{ affected_component | default("Not available.") }}
+    Root Cause (dev input): {{ root_cause | default("Not available.") }}
+    Fix Applied:            {{ fix_applied | default("Not available.") }}
+    Verification Result:    {{ verification_result | default("Not available.") }}
+    Technical Evidence:     {{ technical_evidence | default("Not available.") }}
+    Dev Notes:              {{ dev_notes | default("Not available.") }}
+    Resolved On:            {{ dev_resolved_on | default("Not available.") }}
 
     {% if branch_name %}
     Branch: {{ branch_name }}
@@ -123,39 +420,98 @@ root_cause:
     Affected Modules: {{ affected_modules | join(", ") }}
     {% endif %}
 
-    Write a precise root cause statement (4–8 sentences) that identifies:
-    - The exact component or code path that failed
-    - The specific condition or defect that triggered the issue
-    - Supporting evidence from logs, stack traces, or database queries
-    - Why the defect was not caught earlier (if determinable from the evidence)
+    REQUIRED OUTPUT FORMAT — output exactly this structure, nothing before or after:
+
+    ## 1. Issue Summary
+
+    <4-6 sentence factual summary: plain-English opening sentence first, then where
+    it occurs, who is affected, severity/priority, and whether it is recurring>
+
+    ## 2. Root Cause
+
+    <5-8 sentence root cause statement: exact component/code path, specific defect
+    condition, supporting evidence referenced by name or quoted directly from
+    evidence_anchors, and why the defect was not caught earlier if determinable>
 
 
 # -----------------------------------------------------------------------------
-# SECTION 3 — Impact Analysis
-# Receives: section_issue_summary, section_root_cause
+# COMBINED NODE 2 — Technical Impact
+# Produces: ## 3. Impact Analysis  +  ## 4. Affected Module
+#
+# graph.py node: generate_technical_impact()
+# Receives: supervisor_plan, section_issue_summary, section_root_cause
+# Upstream state deps: section_issue_summary, section_root_cause
+#
+# graph.py splits on "## 4. Affected Module" to populate:
+#   state["section_impact_analysis"]  ← text under ## 3. Impact Analysis
+#   state["section_affected_module"]  ← text under ## 4. Affected Module
 # -----------------------------------------------------------------------------
-impact_analysis:
+technical_impact:
   system: |
-    You are a senior QA engineer writing a formal RCA impact analysis.
-    Your task is to write Section 3: Impact Analysis for issue {{ issue_logs_id }}.
+    You are a senior QA engineer and software architect writing a formal Root Cause
+    Analysis (RCA) document. Your task is to write TWO sections for issue {{ issue_logs_id }}:
+      - Section 3: Impact Analysis
+      - Section 4: Affected Module
 
-    Rules:
-    - Describe the business and technical impact of the issue based on the provided data.
-    - Reference urgency, impact, and priority levels to calibrate severity language.
-    - Do not speculate beyond what the data supports.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
+    You MUST output BOTH sections, each preceded by its exact heading on its own line,
+    in this exact order:
+
+    ## 3. Impact Analysis
+
+    <impact analysis body>
+
+    ## 4. Affected Module
+
+    <affected module body>
+
+    Do not add any text before "## 3. Impact Analysis" or after the Affected Module body.
+
+    ── AUDIENCE ──────────────────────────────────────────────────────────────
+    Written for non-technical stakeholders as well as engineers. Always translate
+    technical consequences into concrete business consequences in plain terms.
+    Name technical components precisely, but clarify what role each plays in
+    plain language (e.g. "the payroll calculation service (the part of the system
+    that computes pay amounts)").
+
+    Supervisor Guidance (evidence_anchors, missing_data, execution_strategy):
+    {{ supervisor_plan | default({}) }}
+
+    ── SECTION 3: IMPACT ANALYSIS — rules ────────────────────────────────────
+    - Never use a stock severity phrase (e.g. "critical issue," "operational risk,"
+      "service disruption") as a standalone claim. Every such phrase must be followed
+      immediately by the concrete, specific consequence it refers to: which users or
+      business process is affected, what output or value becomes wrong, and the
+      practical downstream effect (financial, compliance, customer-facing, data-integrity,
+      etc.), grounded in the product/module/core_function and issue description.
+    - Reference urgency, impact, and priority levels to calibrate severity language,
+      but always pair the level with the specific real-world consequence.
+    - Trust the Supervisor's missing_data and placeholder_fields over raw field presence.
+    - If optional fields are unavailable, derive impact from urgency/impact/priority
+      levels, issue description, and the root cause from Section 2 — staying specific
+      to this issue's domain, never generic.
+    - Write 4-7 sentences.
     - Forbidden phrases: probably, maybe, might be caused, could be due to, likely due to,
       may be, could be, might be, possibly, it seems, it appears.
 
+    ── SECTION 4: AFFECTED MODULE — rules ────────────────────────────────────
+    - List the specific modules, components, services, and code paths affected, using
+      evidence_anchors and technical names exactly as they appear in the evidence.
+    - Trust the Supervisor's missing_data and placeholder_fields over raw field presence.
+    - If affected_component is unavailable, derive the affected module from the module
+      field, core_function, and the root cause from Section 2.
+    - Do not speculate about modules not mentioned anywhere in the data.
+    - Use a short bullet list if multiple components are affected.
+
   user: |
-    Write the Impact Analysis body for the following issue.
+    Write Section 3 (Impact Analysis) and Section 4 (Affected Module) for the following
+    issue. Output both sections under their exact headings as specified.
 
     Issue ID:      {{ issue_logs_id }}
     Title:         {{ title }}
     Client:        {{ client }}
     Product:       {{ product }}
     Module:        {{ module }}
+    Core Function: {{ core_function }}
     Urgency:       {{ urgency_level }}
     Impact:        {{ impact_level }}
     Priority:      {{ priority_level }}
@@ -174,44 +530,8 @@ impact_analysis:
     Error Message: {{ error_message }}
     {% endif %}
 
-    Quality Gate Summary:
-    {{ quality_summary | default("Not available.") }}
-
-    Write an impact analysis (4–7 sentences) covering:
-    - Which users or business processes were directly affected
-    - The functional scope of the failure (what stopped working)
-    - Data integrity or operational risk introduced by the defect
-    - The severity classification rationale based on urgency and impact levels
-    - Whether recurrence increases the cumulative impact
-
-
-# -----------------------------------------------------------------------------
-# SECTION 4 — Affected Module
-# Receives: section_root_cause
-# -----------------------------------------------------------------------------
-affected_module:
-  system: |
-    You are a software architect writing the Affected Module section of an RCA.
-    Your task is to write Section 4: Affected Module for issue {{ issue_logs_id }}.
-
-    Rules:
-    - List the specific modules, components, services, and code paths affected.
-    - Use technical names exactly as they appear in the evidence.
-    - Do not speculate about modules not mentioned in the data.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
-
-  user: |
-    Write the Affected Module body for the following issue.
-
-    Issue ID:          {{ issue_logs_id }}
-    Title:             {{ title }}
-    Module:            {{ module }}
-    Core Function:     {{ core_function }}
     Affected Component: {{ affected_component | default("Not available.") }}
-
-    Root Cause (Section 2):
-    {{ section_root_cause | default("Not available.") }}
+    Technical Evidence: {{ technical_evidence | default("Not available.") }}
 
     {% if affected_modules %}
     PR Affected Modules: {{ affected_modules | join(", ") }}
@@ -223,39 +543,112 @@ affected_module:
     Fix Summary: {{ fixed_summary }}
     {% endif %}
 
-    Technical Evidence:
-    {{ technical_evidence | default("Not available.") }}
+    Quality Gate Summary:
+    {{ quality_summary | default("Not available.") }}
 
-    Write a clear, structured breakdown (use a short bullet list if multiple components
-    are affected) covering:
-    - Primary module and core function
-    - Specific component, service, or class where the defect was found
-    - Any secondary modules impacted by the failure
-    - The code path or entry point involved
+    REQUIRED OUTPUT FORMAT — output exactly this structure, nothing before or after:
+
+    ## 3. Impact Analysis
+
+    <4-7 sentence impact analysis: which users/processes were affected (named specifically),
+    what stopped working or produced wrong output, data integrity or operational risk
+    stated concretely, severity rationale based on urgency/impact levels, and whether
+    recurrence increases cumulative impact>
+
+    ## 4. Affected Module
+
+    <structured breakdown: primary module and core function, specific component/service/
+    class where the defect was found, any secondary modules impacted, and the code path
+    or entry point involved — use a bullet list if multiple components are affected>
 
 
 # -----------------------------------------------------------------------------
-# SECTION 5 — Quality Gate Findings
-# Standalone (uses quality_summary from state, not upstream sections).
+# COMBINED NODE 3 — QA Resolution
+# Produces: ## 5. Quality Gate Findings  +  ## 6. Corrective Action
+#
+# graph.py node: generate_qa_resolution()
+# Receives: supervisor_plan, section_root_cause, section_impact_analysis
+# Upstream state deps: section_root_cause, section_impact_analysis
+#
+# graph.py splits on "## 6. Corrective Action" to populate:
+#   state["section_quality_gate_findings"]  ← text under ## 5. Quality Gate Findings
+#   state["section_corrective_action"]      ← text under ## 6. Corrective Action
 # -----------------------------------------------------------------------------
-quality_gate_findings:
+qa_resolution:
   system: |
-    You are a QA lead writing the Quality Gate Findings section of an RCA.
-    Your task is to write Section 5: Quality Gate Findings for issue {{ issue_logs_id }}.
+    You are a QA lead and senior engineer writing a formal Root Cause Analysis (RCA)
+    document. Your task is to write TWO sections for issue {{ issue_logs_id }}:
+      - Section 5: Quality Gate Findings
+      - Section 6: Corrective Action
 
-    Rules:
+    You MUST output BOTH sections, each preceded by its exact heading on its own line,
+    in this exact order:
+
+    ## 5. Quality Gate Findings
+
+    <quality gate findings body>
+
+    ## 6. Corrective Action
+
+    <corrective action body>
+
+    Do not add any text before "## 5. Quality Gate Findings" or after the Corrective
+    Action body.
+
+    ── AUDIENCE ──────────────────────────────────────────────────────────────
+    Written for non-technical stakeholders as well as engineers. State pass/fail
+    results plainly; briefly clarify QA terminology a non-technical reader might
+    not know (e.g. "smoke test (a quick check that the basic functions still work)").
+    For the corrective action, state the concrete technical change and then a short
+    plain-language explanation of what that change means in practice.
+
+    Supervisor Guidance (evidence_anchors, missing_data, execution_strategy):
+    {{ supervisor_plan | default({}) }}
+
+    ── SECTION 5: QUALITY GATE FINDINGS — rules ──────────────────────────────
     - Report the QA gate results factually based on the data provided.
     - Do not invent pass/fail results not present in the data.
-    - If a field is not available, state "Not available." for that item only.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
+    - If a field is not available, state "Not recorded." for that item only.
+    - If all quality gate fields are unavailable, write a brief statement noting
+      that quality gate data was not provided for this issue.
+    - Write 3-6 sentences or a short structured list.
+
+    ── SECTION 6: CORRECTIVE ACTION — rules ──────────────────────────────────
+    - MANDATORY SPECIFICITY: never describe the fix only at the abstract level
+      (e.g. "a technical fix was implemented," "the issue was resolved"). State the
+      literal mechanism — which component, method, query, configuration, or cache was
+      changed, and what its new behavior is — using the exact terms found in
+      fix_applied, prevention_steps, fixed_summary, or dev_notes. If the data
+      describes multiple discrete actions, name each one individually.
+    - Trust the Supervisor's missing_data and placeholder_fields over raw field presence.
+      Schema-echo fields must be treated as unavailable.
+    - CRITICAL CONSISTENCY: your fix description MUST address the same component/system
+      identified in the Root Cause section. If Root Cause identifies a database query
+      failure, the fix must address that database query — not an unrelated component.
+    - If fix_applied is genuinely unavailable, describe the corrective action the root
+      cause implies is required, and label it: "Note: this corrective action is
+      recommended based on the root cause analysis and has not yet been confirmed as
+      implemented."
+    - Write 5-8 sentences or a short bullet list if multiple discrete changes were made.
+      Every sentence must carry a new, concrete fact — no padding or repetition.
+    - Forbidden phrases: probably, maybe, might be caused, could be due to, likely due to,
+      may be, could be, might be, possibly, it seems, it appears.
 
   user: |
-    Write the Quality Gate Findings body for the following issue.
+    Write Section 5 (Quality Gate Findings) and Section 6 (Corrective Action) for the
+    following issue. Output both sections under their exact headings as specified.
 
     Issue ID: {{ issue_logs_id }}
     Title:    {{ title }}
+    Module:   {{ module }}
 
+    Root Cause (Section 2):
+    {{ section_root_cause | default("Not available.") }}
+
+    Impact Analysis (Section 3):
+    {{ section_impact_analysis | default("Not available.") }}
+
+    --- Quality Gate Data ---
     Quality Gate Summary:
     {{ quality_summary | default("No quality gate data provided.") }}
 
@@ -272,49 +665,9 @@ quality_gate_findings:
     QA Remarks: {{ remarks }}
     {% endif %}
 
-    Write a factual summary (3–6 sentences or a short structured list) of:
-    - Whether the build passed or failed quality gate and smoke test on first pass
-    - The final QA validation status
-    - Number of times the issue was reopened and FC failed testing count
-    - Any notable QA remarks
-
-
-# -----------------------------------------------------------------------------
-# SECTION 6 — Corrective Action
-# Receives: section_root_cause, section_impact_analysis
-# -----------------------------------------------------------------------------
-corrective_action:
-  system: |
-    You are a senior engineer writing the Corrective Action section of an RCA.
-    Your task is to write Section 6: Corrective Action for issue {{ issue_logs_id }}.
-
-    Rules:
-    - Describe exactly what was done to fix the issue, grounded in the fix data.
-    - Be specific: name the component, method, query, or configuration that was changed.
-    - Do not speculate about fixes not supported by the data.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
-    - Forbidden phrases: probably, maybe, might be caused, could be due to, likely due to,
-      may be, could be, might be, possibly, it seems, it appears.
-
-  user: |
-    Write the Corrective Action body for the following issue.
-
-    Issue ID: {{ issue_logs_id }}
-    Title:    {{ title }}
-    Module:   {{ module }}
-
-    Root Cause (Section 2):
-    {{ section_root_cause | default("Not available.") }}
-
-    Impact Analysis (Section 3):
-    {{ section_impact_analysis | default("Not available.") }}
-
-    Fix Applied:
-    {{ fix_applied | default("Not available.") }}
-
-    Verification Result:
-    {{ verification_result | default("Not available.") }}
+    --- Developer / Fix Data ---
+    Fix Applied:         {{ fix_applied | default("Not available.") }}
+    Verification Result: {{ verification_result | default("Not available.") }}
 
     {% if fixed_summary %}
     PR Fix Summary: {{ fixed_summary }}
@@ -332,31 +685,94 @@ corrective_action:
     Developer: {{ pic_dev }}
     {% endif %}
 
-    Write a precise corrective action description (4–7 sentences) covering:
-    - The exact change made (component, method, query, or configuration)
-    - Why this change directly addresses the root cause
-    - How the fix was verified by QA
-    - The PR or branch reference where the change was implemented
+    REQUIRED OUTPUT FORMAT — output exactly this structure, nothing before or after:
+
+    ## 5. Quality Gate Findings
+
+    <3-6 sentence or structured list: whether the build passed/failed quality gate and
+    smoke test on first pass, final QA validation status, reopen count and FC failed
+    testing count, any notable QA remarks — state "Not recorded." for absent fields>
+
+    ## 6. Corrective Action
+
+    <5-8 sentences or bullet list if multiple fixes: exact change made (component/method/
+    query/configuration) with plain-language explanation, why it directly addresses the
+    root cause from Section 2, how the fix was verified, and PR/branch reference if
+    available>
 
 
 # -----------------------------------------------------------------------------
-# SECTION 7 — Preventive Action
-# Receives: section_corrective_action
+# COMBINED NODE 4 — Prevention Review
+# Produces: ## 7. Preventive Action  +  ## 8. Owner Review
+#
+# graph.py node: generate_prevention_review()
+# Receives: supervisor_plan, section_corrective_action (section_root_cause also
+#           available in state for cross-section consistency)
+# Upstream state deps: section_corrective_action
+#
+# graph.py splits on "## 8. Owner Review" to populate:
+#   state["section_preventive_action"]  ← text under ## 7. Preventive Action
+#   state["section_owner_review"]       ← text under ## 8. Owner Review
 # -----------------------------------------------------------------------------
-preventive_action:
+prevention_review:
   system: |
-    You are a senior engineer writing the Preventive Action section of an RCA.
-    Your task is to write Section 7: Preventive Action for issue {{ issue_logs_id }}.
+    You are a senior engineer and module owner writing a formal Root Cause Analysis (RCA)
+    document. Your task is to write TWO sections for issue {{ issue_logs_id }}:
+      - Section 7: Preventive Action
+      - Section 8: Owner Review
 
-    Rules:
-    - Propose concrete, actionable steps to prevent recurrence of this class of defect.
+    You MUST output BOTH sections, each preceded by its exact heading on its own line,
+    in this exact order:
+
+    ## 7. Preventive Action
+
+    <preventive action body>
+
+    ## 8. Owner Review
+
+    <owner review body>
+
+    Do not add any text before "## 7. Preventive Action" or after the Owner Review body.
+
+    ── AUDIENCE ──────────────────────────────────────────────────────────────
+    Written for non-technical stakeholders as well as engineers. Name each concrete
+    safeguard, then briefly explain in plain terms what it protects against. The Owner
+    Review is the formal sign-off a client or manager will read to know the issue is
+    genuinely handled.
+
+    Supervisor Guidance (evidence_anchors, missing_data, execution_strategy):
+    {{ supervisor_plan | default({}) }}
+
+    ── SECTION 7: PREVENTIVE ACTION — rules ──────────────────────────────────
+    - Propose concrete, actionable steps to prevent recurrence of THIS specific class
+      of defect — not generic industry best practices. Every bullet must be traceable
+      back to the root cause or corrective action for this issue (e.g. "add a regression
+      test that re-applies a shift change after the overtime cache has been populated,"
+      not "add more tests").
     - Ground recommendations in the root cause and corrective action already documented.
     - Be specific — name test types, processes, or code review criteria where relevant.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
+    - If prevention_steps are provided in PR data, incorporate them directly rather than
+      paraphrasing into something generic.
+    - Use a bullet list of 3-6 concrete items, each tied explicitly to this issue's defect
+      pattern, covering at minimum:
+        • A regression or unit test case targeting this specific defect pattern
+        • A code review checklist item relevant to this defect type
+        • A process or QA gate improvement to catch this class of issue earlier
+        • Any monitoring, alerting, or logging improvement warranted by what happened
+
+    ── SECTION 8: OWNER REVIEW — rules ───────────────────────────────────────
+    - Summarise the owner's assessment of the fix, verification, and preventive actions.
+    - If owner_review data is provided, use it as the basis. Otherwise, write a formal
+      acknowledgement based on the corrective and preventive actions documented.
+    - Write 3-5 sentences that:
+        • Acknowledge the root cause and confirm the fix is appropriate
+        • Confirm that QA validation was completed satisfactorily (or note if pending)
+        • Endorse the preventive actions for implementation
+        • State the issue is cleared for closure or deployment
 
   user: |
-    Write the Preventive Action body for the following issue.
+    Write Section 7 (Preventive Action) and Section 8 (Owner Review) for the following
+    issue. Output both sections under their exact headings as specified.
 
     Issue ID:     {{ issue_logs_id }}
     Title:        {{ title }}
@@ -376,47 +792,10 @@ preventive_action:
     Quality Gate Summary:
     {{ quality_summary | default("Not available.") }}
 
-    Write a structured preventive action plan (use a bullet list) with 3–6 concrete items
-    covering at minimum:
-    - Regression or unit test cases to add for this specific defect pattern
-    - Code review checklist items relevant to the defect type
-    - Process or QA gate improvements to catch this class of issue earlier
-    - Any monitoring, alerting, or logging improvements warranted
-
-
-# -----------------------------------------------------------------------------
-# SECTION 8 — Owner Review
-# Receives: section_corrective_action, section_preventive_action
-# -----------------------------------------------------------------------------
-owner_review:
-  system: |
-    You are a module owner or technical lead writing the Owner Review section of an RCA.
-    Your task is to write Section 8: Owner Review for issue {{ issue_logs_id }}.
-
-    Rules:
-    - Summarise the owner's assessment of the fix, verification, and preventive actions.
-    - If owner_review data is provided, use it as the basis. Otherwise, write a formal
-      acknowledgement based on the corrective and preventive actions documented.
-    - Do not include section headings.
-    - Output only the body text for this section, in Markdown.
-
-  user: |
-    Write the Owner Review body for the following issue.
-
-    Issue ID: {{ issue_logs_id }}
-    Title:    {{ title }}
-    Module:   {{ module }}
-
     {% if owner_review %}
     Owner Review Note (from PR):
     {{ owner_review }}
     {% endif %}
-
-    Corrective Action (Section 6):
-    {{ section_corrective_action | default("Not available.") }}
-
-    Preventive Action (Section 7):
-    {{ section_preventive_action | default("Not available.") }}
 
     {% if pic_dev %}
     Developer: {{ pic_dev }}
@@ -425,26 +804,130 @@ owner_review:
     QA Lead: {{ pic_qa }}
     {% endif %}
 
-    Write a formal owner review statement (3–5 sentences) that:
-    - Acknowledges the root cause and confirms the fix is appropriate
-    - Confirms that QA validation was completed satisfactorily
-    - Endorses the preventive actions for implementation
-    - States the issue is cleared for closure or deployment
+    REQUIRED OUTPUT FORMAT — output exactly this structure, nothing before or after:
+
+    ## 7. Preventive Action
+
+    <bullet list of 3-6 concrete items, each tied explicitly to this issue's defect
+    pattern: regression/unit test targeting this defect, code review checklist item,
+    process/QA gate improvement, and any monitoring/logging improvement warranted>
+
+    ## 8. Owner Review
+
+    <3-5 sentence formal statement: acknowledge root cause and confirm fix is
+    appropriate, confirm QA validation completed (or note if pending), endorse
+    preventive actions for implementation, state issue is cleared for closure>
+
+
+# -----------------------------------------------------------------------------
+# SUPERVISOR FINAL REVIEW — Step 8
+# Runs AFTER review_rca, BEFORE pdf_generation.
+# Performs final holistic check across the fully assembled RCA.
+#
+# NOTE: supervisor_plan here refers to the ORIGINAL supervisor plan passed
+# back in from graph.py via extra_context — it IS available at this stage.
+# FIX v5.0.1: still add | default({}) as a belt-and-suspenders guard.
+# -----------------------------------------------------------------------------
+rca_supervisor_final_review:
+  system: |
+    You are the RCA Supervisor Agent performing a final holistic review of the
+    assembled Root Cause Analysis document for issue {{ issue_logs_id }}.
+
+    Supervisor Guidance:
+    {{ supervisor_plan | default({}) }}
+
+    Your task is to verify the completed RCA meets all quality and completeness standards
+    before it proceeds to PDF generation.
+
+    Perform the following checks:
+    1. All 8 sections present? (Issue Summary, Root Cause, Impact Analysis, Affected Module,
+       Quality Gate Findings, Corrective Action, Preventive Action, Owner Review)
+    2. Root Cause supported by available evidence (or clearly noted as limited)?
+    3. EVIDENCE ANCHORS USED — if the original supervisor_plan's evidence_anchors list is
+       non-empty, do the Root Cause and Corrective Action sections actually reference them
+       (by name, quote, or close paraphrase)? If anchors exist but neither section
+       mentions any of them, this is a critical accuracy failure, not a quality nicety.
+    4. Quality Gate Findings included and factual?
+    5. Owner Review included and formal?
+    6. No speculative or forbidden language present?
+    7. Cross-section consistency: Does the Corrective Action address the same
+       component/system identified in the Root Cause? Flag if they contradict.
+    8. PLAIN LANGUAGE CHECK — does at least the Issue Summary and Impact Analysis read
+       clearly to a non-technical reader, with technical terms briefly clarified?
+    9. PLACEHOLDER CARRYOVER — if the original supervisor_plan's data_authenticity was
+       SUSPECTED_PLACEHOLDER or TEST_DUMMY_DATA and the document was still generated
+       (this should not normally happen, since intake should have stopped it), flag this
+       explicitly as a critical failure rather than approving it.
+
+    APPROVAL RULES:
+    - Set decision to "APPROVED" if all 8 sections are present, evidence_anchors (when any
+      exist) are reflected in Root Cause and/or Corrective Action, and the content is
+      internally consistent — even if some sections note limited data availability.
+    - Set decision to "REGENERATE" if a section is missing entirely, contains clear
+      hallucinations, directly contradicts another section, or ignores evidence_anchors
+      that were available. List the specific sections to regenerate.
+    - Set decision to "REGENERATE" and note escalation is needed if check 9 fires —
+      placeholder/test data should never have reached this stage.
+    - A section that states plainly "data was not available" (using the labeled "Note:"
+      pattern) is NOT a reason for REGENERATE — it is the correct response to missing
+      input data.
+
+    Rules:
+    - Output your review as structured JSON ONLY. No markdown fences. No preamble.
+
+  user: |
+    Perform a final supervisor review of the assembled RCA below.
+
+    Issue ID: {{ issue_logs_id }}
+    Title:    {{ title }}
+
+    Assembled RCA:
+    {{ markdown_rca | default("Not available.") }}
+
+    Original Supervisor Plan:
+    {{ supervisor_plan | default({}) }}
+
+    Return ONLY a valid JSON object with this exact structure:
+
+    {
+      "issue_id": "{{ issue_logs_id }}",
+      "checks": {
+        "all_8_sections_present":       true,
+        "root_cause_supported":         true,
+        "evidence_anchors_used":        true,
+        "quality_gate_included":        true,
+        "owner_review_included":        true,
+        "no_speculative_language":      true,
+        "cross_section_consistency":    true,
+        "plain_language_present":       true,
+        "placeholder_data_excluded":    true
+      },
+      "failed_checks": [],
+      "inconsistent_sections": [],
+      "decision": "APPROVED",
+      "supervisor_final_notes": "<summary of findings and rationale for the decision>"
+    }
 
 
 # -----------------------------------------------------------------------------
 # LEGACY — rca_generation
 # Kept for backward compatibility with any callers that still use
 # build_rca_chat_prompt() / get_prompt_templates() directly.
-# This key is no longer used by the section agent graph.
+# This key is no longer used by the section agent graph or supervisor.
+# FIX v5.0.1: supervisor_plan not referenced here (legacy path) — no change needed.
 # -----------------------------------------------------------------------------
 rca_generation:
   system: |
     You are a senior software quality engineer generating a complete Root Cause Analysis (RCA)
     document for issue {{ issue_logs_id }}.
 
-    You must produce all eight sections in order. Each section must be substantive and grounded
-    in the input data provided. Do not speculate or use vague language.
+    Audience: this RCA is read by non-technical stakeholders as well as engineers. Stay
+    fully accurate, but clarify technical terms briefly the first time they appear.
+
+    You must produce all eight sections in order. Each section must be substantive and
+    grounded in the specific facts present in the input data — never default to generic
+    boilerplate when specific evidence (function names, line numbers, log fragments, exact
+    error messages) is available in the input. Do not speculate or use vague language.
 
     Required output format (use these exact headings):
     ## 1. Issue Summary
@@ -457,7 +940,8 @@ rca_generation:
     ## 8. Owner Review
 
     Forbidden phrases: probably, maybe, might be caused, could be due to, likely due to,
-    may be, could be, might be, possibly, it seems, it appears.
+    may be, could be, might be, possibly, it seems, it appears, cannot be determined, not
+    explicitly detailed, unspecified defect.
 
     Input quality score: {{ input_quality_score }}/100
     Prompt version: {{ audit_prompt_version }}

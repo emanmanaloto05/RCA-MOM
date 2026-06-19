@@ -1,4 +1,3 @@
-# common/utils.py
 from __future__ import annotations
 
 import logging
@@ -208,6 +207,41 @@ def _compute_input_quality_score(
     return score
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SUPERVISOR PLAN DEFAULT
+#
+# FIX: supervisor_plan is injected by graph.py only for section agents that
+# run AFTER run_supervisor. The supervisor's own prompts (rca_supervisor,
+# rca_supervisor_final_review) and any section rendered before supervisor_plan
+# is written to state would trigger a StrictUndefined Jinja2 error because
+# {{ supervisor_plan }} appears in every section's system prompt but the
+# variable is only present in extra_context for downstream agents.
+#
+# Solution: always inject a safe default for supervisor_plan (and the two
+# supplementary keys referenced in some templates) before rendering any
+# section prompt. extra_context passed by graph.py will override the default
+# for agents that have the real plan available.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SUPERVISOR_PLAN_DEFAULT: dict[str, Any] = {
+    "route_decision": "CONTINUE",
+    "execution_strategy": "",
+    "missing_data": [],
+    "placeholder_fields": [],
+    "evidence_anchors": [],
+    "supervisor_notes": "",
+    "data_authenticity": "UNKNOWN",
+    "overall_data_quality": "UNKNOWN",
+    "required_sections": [],
+    "critical_areas": [],
+    "data_conflicts": [],
+    "regeneration_targets": [],
+    "section_quality_thresholds": {},
+    "section_plan": {},
+    "execution_sequence": [],
+}
+
+
 # Context Builder
 def build_rca_template_context(
     rca_input: RCAInputModel,
@@ -307,6 +341,25 @@ def build_rca_template_context(
         "audit_generated_at": audit_generated_at,
         "audit_status": "generated",
         "attachments": rca_input.attachments,
+        # ── FIX: always inject safe defaults so StrictUndefined never fires
+        #    on supervisor_plan, supervisor_review, or supervisor_feedback.
+        #    These are overridden by extra_context in graph.py for agents
+        #    that have the real supervisor plan available.
+        "supervisor_plan": _SUPERVISOR_PLAN_DEFAULT,
+        "supervisor_review": "",
+        "supervisor_feedback": "",
+        # Section outputs — default to empty string; overridden via extra_context
+        # when upstream sections have already been generated.
+        "section_issue_summary": "",
+        "section_root_cause": "",
+        "section_impact_analysis": "",
+        "section_affected_module": "",
+        "section_quality_gate_findings": "",
+        "section_corrective_action": "",
+        "section_preventive_action": "",
+        "section_owner_review": "",
+        # Final review inputs
+        "markdown_rca": "",
     }
 
     return context
@@ -377,6 +430,10 @@ def render_section_prompt(
         quality_summary=quality_summary,
     )
 
+    # FIX: merge extra_context AFTER base context so caller-supplied values
+    # (including the real supervisor_plan dict from graph.py) override the
+    # safe defaults injected by build_rca_template_context(). This is the
+    # correct merge order — extra_context wins over base defaults.
     if extra_context:
         context = {**context, **extra_context}
 

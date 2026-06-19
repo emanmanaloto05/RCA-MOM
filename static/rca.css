@@ -1,176 +1,132 @@
 /* ============================================================
-   RCA Document Stylesheet
+   RCA Document Stylesheet  —  v4.4.4 (Playwright PDF Optimized)
    Brand: direc Business Technologies Inc.
-
-   Page size  : A4  (210mm x 297mm)
-   Margins    : top 40mm (room for repeating header)
-                left 25.4mm | right 25.4mm | bottom 25.4mm
-
-   Colors:
-     Border Green  #37A533  rgb(55,165,51)   - table/card borders (1.3px)
-     Banner Green  #1E651C  rgb(30,101,28)   - RCA card header bg
-     Body text     #000000
-     Background    #ffffff
-   Fonts: Calibri, "Segoe UI", Arial, sans-serif
-
-   NOTE ON THE REPEATING HEADER
-   -----------------------------------------------------------
-   The header (logo + company details) is built with the CSS
-   "running element" mechanism (CSS GCPM), which is supported by
-   PDF renderers such as WeasyPrint / Prince. The header is taken
-   out of the normal document flow and placed into the page-margin
-   boxes (@top-left / @top-right) of EVERY page, so it repeats
-   automatically without being duplicated in the markup.
-
-   If your renderer does not support `position: running()` /
-   `element()` (e.g. plain Chrome "print to pdf"), the declarations
-   are simply ignored and the header will display once, in normal
-   flow, at the top of the document - it will not repeat. In that
-   case, switch to WeasyPrint or duplicate the header markup inside
-   each `.page` block.
    ============================================================ */
+
+
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+
+:root {
+    --color-banner-green:   #146b16;
+    --color-light-green-bg: #F0F7F0;
+    --color-tint-bg:        #F7FBF7;
+    --color-body-text:      #111111;
+    --color-secondary-text: #333333;
+    --color-white:          #ffffff;
+
+    --font-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                 Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: Consolas, 'SFMono-Regular', 'Courier New', monospace;
+
+    --weight-regular:  400;
+    --weight-semibold: 600;
+    --weight-bold:     700;
+
+    --tracking-tight:  0.2pt;
+    --tracking-normal: 0.4pt;
+    --tracking-wide:   0.6pt;
+    --tracking-wider:  1pt;
+
+    --radius-sm: 3px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+
+    --shadow-soft: 0 2px 10px rgba(17,17,17,0.06);
+    --shadow-card: 0 1px 3px  rgba(17,17,17,0.08);
+
+    /* Spacing scale */
+    --space-3xs:  2pt;
+    --space-2xs:  4pt;
+    --space-xs:   6pt;
+    --space-sm:   9pt;
+    --space-md:  13pt;
+    --space-lg:  18pt;
+    --space-xl:  24pt;
+    --space-2xl: 32pt;
+
+    --screen-header-gap: 20pt;
+
+    /* Page margins (screen) — 1 inch */
+    --margin-top:    1in;
+    --margin-sides:  1in;
+    --margin-bottom: 1in;
+}
+
 
 /* ============================================================
    RESET
    ============================================================ */
 
-*,
-*::before,
-*::after {
+*, *::before, *::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+
 /* ============================================================
    BASE
    ============================================================ */
 
-body {
-    /* Arial is the exact PDF font; Arimo is a metrically-compatible
-       open-source substitute for web rendering */
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-size: 12pt;           /* all body text = 12pt */
-    font-weight: 400;
-    color: #000000;
-    background: #ffffff;
-    line-height: 1.72;         /* 20.7pt / 12pt ~= 1.725 */
+html, body {
+    font-family: var(--font-base);
+    font-size: 11.5pt;
+    font-weight: var(--weight-regular);
+    color: var(--color-body-text);
+    background: var(--color-tint-bg);
+    line-height: 1.55;
+    letter-spacing: 0.1pt;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
 }
 
-/* ============================================================
-   PAGE WRAPPER  (A4)
-   On screen this simulates the printed page (incl. margins).
-   On print, the real margins come from the @page rule below,
-   so the padding here is removed for print.
-   ============================================================ */
-
-.page {
-    width: 210mm;              /* A4 width */
-    min-height: 297mm;         /* A4 height */
-    margin: 0 auto;
-    /* Screen-only "fake" margins: top 40mm leaves room to preview
-       where the running header will sit when printed */
-    padding: 40mm 25.4mm 25.4mm 25.4mm;
-    background: #ffffff;
-    box-shadow: 0 0 24px rgba(0, 0, 0, 0.10);
-}
 
 /* ============================================================
-   PRINT / PDF
-   ============================================================ */
-
-@media print {
-    @page {
-        size: A4;
-        /* Real page margins. Extra top margin gives the repeating
-           header (logo + company details) a place to render. */
-        margin: 40mm 25.4mm 25.4mm 25.4mm;
-
-        /* Repeating header pieces, placed in the top margin box
-           of every page (WeasyPrint / Prince) */
-        @top-left {
-            content: element(headerLogo);
-            vertical-align: top;
-        }
-        @top-right {
-            content: element(headerDetails);
-            vertical-align: top;
-        }
-    }
-
-    body {
-        margin: 0;
-        padding: 0;
-        background: #fff;
-    }
-
-    .page {
-        width: 100%;
-        min-height: 0;
-        margin: 0;
-        padding: 0;            /* real margins now come from @page */
-        box-shadow: none;
-    }
-
-    /* Pull header pieces out of normal flow -> rendered via @page
-       margin boxes on every page instead */
-    .page-header-logo {
-        position: running(headerLogo);
-    }
-    .page-header-details {
-        position: running(headerDetails);
-    }
-
-    /* Each issue section breaks onto a new page (except first) */
-    .section-divider {
-        page-break-before: always;
-    }
-
-    /* Keep footer pinned to the bottom of the last page's flow,
-       not floating mid-content if content is short */
-    .document-footer {
-        page-break-inside: avoid;
-    }
-}
-
-/* ============================================================
-   HEADER - logo left | address right
-   Rendered once in normal flow (screen) at the top of the page;
-   on print, both children are pulled into the repeating page
-   margin boxes (see @media print above).
+   RUNNING HEADER (Screen Mode Layout)
    ============================================================ */
 
 .header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 11.75mm;    /* gap to title */
+    align-items: center;
+    width: 210mm;
+    margin: 0 auto;
+    padding: 9pt 1in 8pt 1in;
+    background: var(--color-white);
+    border-bottom: 2px solid var(--color-banner-green);
+}
+
+@media screen {
+    .header {
+        box-shadow: var(--shadow-soft);
+        position: static;
+    }
 }
 
 /* ── Logo ─────────────────────────────────────────────────── */
 
 .page-header-logo {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     flex-shrink: 0;
 }
 
 .logo {
-    width: 150px;
+    width: 160px;
     height: auto;
     display: block;
 }
 
-/* ── Address block - right ────────────────────────────────── */
+/* ── Company address block ────────────────────────────────── */
 
 .page-header-details {
     text-align: right;
-    font-size: 7.8pt;          /* small address text */
-    font-weight: 400;
-    color: #000000;
-    line-height: 1.6;
+    font-size: 8.5pt;
+    font-weight: var(--weight-regular);
+    color: var(--color-secondary-text);
+    line-height: 1.5;
 }
 
 .detail-row {
@@ -185,208 +141,755 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
 }
 
 .detail-icon svg {
-    width: 11px;
-    height: 11px;
-    fill: #37A533;
+    width: 10px;
+    height: 10px;
+    fill: var(--color-banner-green);
 }
 
+
 /* ============================================================
-   MAIN TITLE - "Root Cause Analysis (RCA)"
-   Arial Bold 14pt, centred
+   PLAYWRIGHT PDF SUPPORT (Print Media Engine)
+   ============================================================ */
+
+@media print {
+
+    html,
+    body {
+        background: white;
+        margin: 0;
+        padding: 0;
+    }
+
+    @page {
+        size: A4;
+        /* Exactly 1 inch on all sides */
+        margin: 1in 1in 1in 1in;
+    }
+
+    /*
+     * The header is rendered once as a normal flow element on page 1.
+     * We do NOT use position:fixed — that causes Chromium/Playwright to
+     * reserve a blank band at the top of every subsequent page equal to
+     * the header's height, which is the large white gap you see between
+     * pages in the PDF.
+     *
+     * Instead we let the header flow normally on page 1 and rely on the
+     * @page top margin (1 in) to give every page its top breathing room.
+     */
+    .header {
+        position: static;
+        width: 100%;
+        height: auto;
+
+        display: flex !important;
+        justify-content: space-between;
+        align-items: center;
+
+        padding: 9pt 0;
+
+        background: white;
+        border-bottom: 2px solid var(--color-banner-green);
+
+        /* Keep header on its own page segment — never split */
+        page-break-after: avoid;
+        break-after: avoid;
+    }
+
+    .page-header-logo,
+    .page-header-details {
+        position: static !important;
+    }
+
+    .logo {
+        max-height: 46pt;
+        width: auto;
+        display: block;
+    }
+
+    .page-header-details {
+        text-align: right;
+        font-size: 8.5pt;
+        line-height: 1.45;
+    }
+
+    .page {
+        width: 100%;
+        min-height: auto;
+
+        margin: 0;
+        /* No extra top padding needed — header is in normal flow above */
+        padding: 0;
+
+        box-shadow: none;
+        background: white;
+
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+
+    /* Page-break helpers */
+    .section-divider {
+        page-break-before: always;
+        break-before: page;
+    }
+
+    /*
+     * IMPORTANT: "avoid" should only be applied to small, atomic blocks
+     * that genuinely look bad if split (tables, grids, single figures,
+     * short sign-off blocks). It must NOT be applied to large containers
+     * whose content length varies (rca-section, attachments-block) —
+     * doing so forces Chromium to push the *entire* block to the next
+     * page whenever it doesn't fully fit in the remaining space, which
+     * is what produces the big blank gaps at the bottom of pages.
+     *
+     * .rca-section and .attachments-block were removed from this list
+     * on purpose so their content can flow and break naturally across
+     * page boundaries.
+     */
+    .document-footer,
+    .approval-block,
+    .approval-table,
+    .attachment-figure,
+    .info-table,
+    .qa-metrics-grid,
+    .key-facts-grid,
+    .issue-header-block,
+    .issue-meta-strip {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    /* Keep section/title headers glued to the content that follows them,
+       but only the header row itself — not the whole section body. */
+    .rca-card__header,
+    .rca-section__title-row,
+    .issue-header-block,
+    .issue-meta-strip,
+    .attachments-block__heading,
+    .approval-block__heading {
+        page-break-after: avoid;
+        break-after: avoid;
+    }
+
+    /* Allow long sections to break, but never split a single paragraph,
+       list item, or table row in half — and never leave a heading
+       stranded alone at the bottom of a page. */
+    .rca-section__content p,
+    .rca-section__content li,
+    .rca-section__content table tr,
+    .rca-section__content blockquote,
+    .rca-section__content pre {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    .rca-section__content h2,
+    .rca-section__content h3,
+    .rca-section__content h4 {
+        page-break-after: avoid;
+        break-after: avoid;
+    }
+
+    .document-footer {
+        margin-top: 18pt;
+        padding-bottom: 10pt;
+    }
+}
+
+
+/* ============================================================
+   PAGE WRAPPER  (A4 preview on screen)
+   ============================================================
+   Scoped to @media screen so it never competes with the
+   @media print { .page { ... } } rule above.
+   ============================================================ */
+
+@media screen {
+    .page {
+        width: 210mm;
+        min-height: 297mm;
+
+        margin: var(--screen-header-gap) auto 0 auto;
+
+        padding: var(--margin-top) var(--margin-sides) var(--margin-bottom) var(--margin-sides);
+        background: var(--color-white);
+        box-shadow: var(--shadow-soft);
+    }
+}
+
+
+/* ============================================================
+   MAIN DOCUMENT TITLE
    ============================================================ */
 
 .main-title {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-size: 14pt;
-    font-weight: 700;
-    color: #000000;
+    font-size: 16pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
     text-align: center;
-    margin-bottom: 11.75mm;    /* gap to info table */
-    letter-spacing: 0;
+    margin-bottom: var(--space-md);
+    margin-top: var(--space-2xs);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    border-bottom: 1.5px solid var(--color-banner-green);
+    padding-bottom: var(--space-xs);
 }
 
+
 /* ============================================================
-   INFO TABLE
-   Full-width | border: 1.3px solid #37A533 on all cells
-   Col 1: 52.6mm label | Col 2: remaining width value
-   Cell padding: 4pt top/bottom | 5.7pt left/right
+   DOCUMENT INFO TABLE
    ============================================================ */
 
 .info-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 11.75mm;    /* gap before section heading */
-    font-size: 12pt;
+    margin-bottom: var(--space-lg);
+    font-size: 11pt;
 }
 
 .info-table tr {
-    border: 1.3px solid #37A533;
+    border: 1px solid var(--color-banner-green);
 }
 
 .info-table td {
-    padding: 4pt 5.7pt;        /* ~2mm left/right padding */
+    padding: var(--space-2xs) var(--space-xs);
     vertical-align: middle;
-    border: 1.3px solid #37A533;
-    font-size: 12pt;
-    color: #000000;
-    line-height: 1.72;
+    border: 1px solid var(--color-banner-green);
+    line-height: 1.5;
+    color: var(--color-body-text);
 }
 
-/* Label column - Bold, fixed width */
 .info-table td.label {
-    font-weight: 700;
-    width: 52.6mm;
+    font-weight: var(--weight-bold);
+    width: 48mm;
     white-space: nowrap;
-    background: #ffffff;
+    background: var(--color-light-green-bg);
+    color: var(--color-banner-green);
+    font-size: 10.5pt;
+    letter-spacing: var(--tracking-tight);
 }
 
-/* Value column */
 .info-table td.value {
-    font-weight: 400;
-    background: #ffffff;
+    background: var(--color-white);
+    font-weight: var(--weight-semibold);
 }
 
-/* Bold value (e.g. Company Name cell) */
-.info-table td.value.bold {
-    font-weight: 700;
+.info-table td.value.bold { font-weight: var(--weight-bold); }
+
+/* Approval status badge */
+.approval-badge {
+    display: inline-block;
+    padding: 3pt 10pt;
+    border-radius: var(--radius-sm);
+    font-size: 10.5pt;
+    font-weight: var(--weight-bold);
+    letter-spacing: var(--tracking-normal);
+    background: var(--color-tint-bg);
+    color: var(--color-secondary-text);
 }
+
+.approval-badge--approved,
+.approval-badge--validated {
+    background: var(--color-light-green-bg);
+    color: var(--color-banner-green);
+}
+
+.approval-badge--pending {
+    background: var(--color-tint-bg);
+    color: var(--color-secondary-text);
+    font-style: italic;
+    border: 1px dashed var(--color-secondary-text);
+}
+
+.approval-badge--rejected {
+    background: var(--color-white);
+    color: var(--color-body-text);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    border: 1.5px solid var(--color-body-text);
+}
+
 
 /* ============================================================
-   ISSUE NUMBER HEADING  e.g. "Issue No. 1"
-   Arial Bold 12pt, hanging-indent numbering
+   ISSUE ARTICLE WRAPPER
    ============================================================ */
 
-.issue-heading {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+.issue-article {
+    margin-bottom: var(--space-lg);
+}
+
+/* ── Issue header block ─────────────────────────────────────── */
+
+.issue-header-block {
+    margin-top: var(--space-sm);
+    margin-bottom: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border-left: 5px solid var(--color-banner-green);
+    background: var(--color-light-green-bg);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.issue-eyebrow {
+    font-size: 8pt;
+    font-weight: var(--weight-bold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wider);
+    color: var(--color-banner-green);
+    margin-bottom: var(--space-3xs);
+}
+
+.issue-title-text {
+    font-size: 14pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-body-text);
+    line-height: 1.35;
+}
+
+/* ── Meta pill strip ────────────────────────────────────────── */
+
+.issue-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs);
+    margin-bottom: var(--space-sm);
+    margin-top: var(--space-2xs);
+}
+
+.meta-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-3xs);
+    font-size: 9.5pt;
+    border: 1px solid var(--color-banner-green);
+    border-radius: var(--radius-sm);
+    padding: 3pt 8pt;
+    background: var(--color-white);
+}
+
+.meta-pill__label {
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-normal);
+    font-size: 8pt;
+}
+
+.meta-pill__value {
+    color: var(--color-body-text);
+    font-weight: var(--weight-semibold);
+}
+
+
+/* ============================================================
+   RCA CARD
+   ============================================================ */
+
+.rca-card {
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    margin-bottom: var(--space-lg);
+    display: block;
+    box-shadow: none;
+}
+
+.rca-card__header {
+    background-color: var(--color-banner-green);
+    color: var(--color-white);
+    font-weight: var(--weight-bold);
+    font-size: 18pt;
+    text-align: center;
+    padding: var(--space-sm) var(--space-md);
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    margin-bottom: 12pt;
+    border-radius: 6px;
+}
+
+.rca-card__body {
+    display: block;
+}
+
+
+/* ============================================================
+   RCA SECTION ROWS
+   ============================================================ */
+
+.rca-section {
+    border: 1.5px solid var(--color-banner-green);
+    border-radius: 6px;
+    margin-bottom: 12pt;
+    overflow: hidden;
+    background: var(--color-white);
+}
+
+.rca-section:first-child {
+    border-top: 1.5px solid var(--color-banner-green);
+}
+
+/* ── Section title row ──────────────────────────────────────── */
+
+.rca-section__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    padding: 7pt var(--space-sm) 7pt var(--space-sm);
+    background: var(--color-banner-green);
+    color: var(--color-white);
+    border-bottom: 1px solid var(--color-banner-green);
+}
+
+.rca-section__number {
+    display: inline-block;
+    width: 22pt;
+    height: 22pt;
+    line-height: 22pt;
+    text-align: center;
+    background: var(--color-white);
+    color: var(--color-banner-green);
+    font-size: 8.5pt;
+    font-weight: var(--weight-bold);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    letter-spacing: var(--tracking-tight);
+}
+
+.rca-section__name {
+    font-weight: var(--weight-bold);
+    font-size: 11pt;
+    color: var(--color-white);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+}
+
+/* ── Section content area ───────────────────────────────────── */
+
+.rca-section__content {
+    padding: 11pt 13pt;
+    font-size: 11pt;
+    color: var(--color-body-text);
+    line-height: 1.6;
+    word-break: normal;
+    overflow-wrap: break-word;
+    background: var(--color-white);
+}
+
+.rca-section__content--ai {
+    padding-left: 18pt;
+}
+
+.rca-section__content--owner {
+    background: var(--color-tint-bg);
+    border-left: 3px solid var(--color-banner-green);
+    margin: var(--space-3xs) var(--space-sm) var(--space-2xs) var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+}
+
+
+/* ── §1 Issue — key facts grid ──────────────────────────────── */
+
+.rca-section__description {
+    margin-bottom: var(--space-sm);
+    line-height: 1.6;
+    color: var(--color-body-text);
+}
+
+.key-facts-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs);
+    margin-top: var(--space-2xs);
+}
+
+.key-fact {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 40mm;
+    min-width: 35mm;
+    border: 1px solid var(--color-banner-green);
+    border-radius: var(--radius-sm);
+    padding: 6pt 10pt;
+    background: var(--color-white);
+}
+
+.key-fact__label {
+    font-size: 8pt;
+    font-weight: var(--weight-bold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--color-banner-green);
+    margin-bottom: var(--space-3xs);
+}
+
+.key-fact__value {
+    font-size: 11pt;
+    color: var(--color-body-text);
+    font-weight: var(--weight-semibold);
+}
+
+
+/* ── §5 Quality Gate — metrics grid ─────────────────────────── */
+
+.qa-metrics-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs);
+}
+
+.qa-metric {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 40mm;
+    min-width: 35mm;
+    border: 1px solid var(--color-banner-green);
+    border-radius: var(--radius-sm);
+    padding: 6pt 10pt;
+    background: var(--color-white);
+}
+
+.qa-metric__label {
+    font-size: 8pt;
+    font-weight: var(--weight-bold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-normal);
+    color: var(--color-secondary-text);
+    margin-bottom: var(--space-3xs);
+}
+
+.qa-metric__value {
+    font-size: 11.5pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-body-text);
+}
+
+.qa-metric__value--pass { color: var(--color-banner-green); }
+
+.qa-metric__value--fail {
+    color: var(--color-body-text);
+    text-decoration: underline;
+    text-decoration-thickness: 1.5px;
+}
+
+.qa-metric__value--na {
+    color: var(--color-secondary-text);
+    font-weight: var(--weight-regular);
+    font-style: italic;
+}
+
+
+/* ============================================================
+   AI-GENERATED MARKDOWN CONTENT
+   ============================================================ */
+
+.rca-section__content--ai h3 {
+    font-size: 10.5pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    background: var(--color-light-green-bg);
+    border-left: 3px solid var(--color-banner-green);
+    padding: var(--space-3xs) var(--space-2xs);
+    margin: var(--space-sm) -18pt var(--space-2xs) -18pt;
+}
+
+.rca-section__content h3 {
+    font-size: 11pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    margin: var(--space-xs) 0 var(--space-2xs) 0;
+}
+
+.rca-section__content--ai h2 {
     font-size: 12pt;
-    font-weight: 700;
-    color: #000000;
-    margin-top: 11.75mm;       /* gap after info table / previous card */
-    margin-bottom: 4pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    margin: var(--space-sm) 0 var(--space-2xs) 0;
+    padding-bottom: var(--space-3xs);
+    border-bottom: 1px solid var(--color-banner-green);
 }
 
-/* ============================================================
-   ISSUE SUBHEADING - issue title beneath "Issue No. N"
-   ============================================================ */
-
-.issue-subheading {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-size: 12pt;
-    font-weight: 400;
-    color: #000000;
-    margin-bottom: 8.5pt;      /* gap before RCA card */
+.rca-section__content--ai h4 {
+    font-size: 11pt;
+    font-weight: var(--weight-bold);
+    font-style: italic;
+    color: var(--color-secondary-text);
+    margin: var(--space-xs) 0 var(--space-3xs) 0;
 }
 
-/* ============================================================
-   RCA CARD TABLE
-   border: 1.3px solid #37A533 (outer) with internal row dividers
-   ============================================================ */
+/* Paragraphs */
+.rca-section__content p {
+    margin: 0 0 var(--space-xs) 0;
+    line-height: 1.6;
+    orphans: 3;
+    widows: 3;
+}
 
-.rca-table {
+.rca-section__content p:last-child { margin-bottom: 0; }
+
+/* Lists */
+.rca-section__content ul,
+.rca-section__content ol {
+    margin: var(--space-2xs) 0 var(--space-sm) 0;
+    padding-left: 20pt;
+}
+
+.rca-section__content ul ul,
+.rca-section__content ol ul,
+.rca-section__content ul ol,
+.rca-section__content ol ol {
+    margin: var(--space-3xs) 0;
+    padding-left: 15pt;
+}
+
+.rca-section__content ul       { list-style-type: disc; }
+.rca-section__content ul ul    { list-style-type: circle; }
+.rca-section__content ul ul ul { list-style-type: square; }
+.rca-section__content ol       { list-style-type: decimal; }
+
+.rca-section__content li {
+    margin-bottom: var(--space-3xs);
+    line-height: 1.6;
+    orphans: 3;
+    widows: 3;
+}
+
+/* Blockquotes */
+.rca-section__content blockquote {
+    margin: var(--space-sm) 0;
+    padding: var(--space-2xs) var(--space-sm);
+    border-left: 3px solid var(--color-banner-green);
+    background: var(--color-tint-bg);
+    color: var(--color-secondary-text);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-style: italic;
+}
+
+.rca-section__content blockquote p { margin: 0; }
+
+/* Inline tables */
+.rca-section__content table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12pt;
-    /* Outer border is green */
-    border: 1.3px solid #37A533;
+    margin: var(--space-xs) 0 var(--space-sm) 0;
+    font-size: 10.5pt;
 }
 
-/* ── Dark green header banner ──────────────────────────────── */
-
-.rca-table thead tr {
-    background-color: #1E651C;
-}
-
-.rca-header-cell {
-    background-color: #1E651C;
-    color: #ffffff;
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-weight: 700;
-    font-size: 12pt;
-    text-align: center;
-    padding: 12px;
-    border: 1.3px solid #1E651C;
-    letter-spacing: 0;
-}
-
-/* ── Section label rows (ISSUE / CAUSE / SOLUTION ...) ───────── */
-
-.section-title {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-weight: 700;
-    font-size: 12pt;
-    color: #000000;
-    background-color: #ffffff;
-    padding: 7pt 5.7pt 5pt 5.7pt;
-    border: 1.3px solid #37A533;
-    border-top: 1.3px solid #37A533;
-    border-bottom: none;       /* merged visually with content cell below */
-}
-
-/* ── Content / body rows ────────────────────────────────────── */
-
-.section-content {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-size: 12pt;
-    font-weight: 400;
-    color: #000000;
-    background-color: #ffffff;
-    padding: 4pt 5.7pt 8pt 5.7pt;
-    border: 1.3px solid #37A533;
-    border-top: none;          /* flows directly below section-title */
+.rca-section__content table th,
+.rca-section__content table td {
+    border: 1px solid var(--color-banner-green);
+    padding: 5pt 9pt;
+    text-align: left;
     vertical-align: top;
-    line-height: 1.72;
+    line-height: 1.5;
 }
 
-/* ── Bullet lists inside content ──────────────────────────── */
-
-.rca-table ul {
-    margin: 0;
-    padding-left: 18pt;        /* 23.7pt indent - 5.7pt cell-padding */
-    list-style-type: disc;
+.rca-section__content table th {
+    background: var(--color-light-green-bg);
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    font-size: 10pt;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-tight);
 }
 
-.rca-table ul li {
-    margin-bottom: 0;
-    line-height: 1.72;
+.rca-section__content table td { font-weight: var(--weight-semibold); }
+
+.rca-section__content table tr:nth-child(even) td {
+    background: var(--color-tint-bg);
 }
 
-.rca-table ul li + li {
-    margin-top: 0;
+/* Code */
+.rca-section__content code {
+    font-family: var(--font-mono);
+    font-size: 9.5pt;
+    background: var(--color-light-green-bg);
+    padding: 1pt 4pt;
+    border-radius: var(--radius-sm);
+    color: var(--color-banner-green);
 }
 
-/* ── Paragraphs inside content (cause, solution, owner review) */
-
-.section-content p {
-    margin: 0;
-    line-height: 1.72;
+.rca-section__content pre {
+    font-family: var(--font-mono);
+    font-size: 9pt;
+    background: var(--color-light-green-bg);
+    padding: var(--space-xs) var(--space-sm);
+    margin: var(--space-2xs) 0 var(--space-sm) 0;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--color-banner-green);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
-.section-content p + p {
-    margin-top: 6pt;
+.rca-section__content pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-weight: var(--weight-regular);
 }
+
+/* Links */
+.rca-section__content a {
+    color: var(--color-banner-green);
+    text-decoration: underline;
+    font-weight: var(--weight-semibold);
+}
+
+/* HR */
+.rca-section__content hr {
+    border: none;
+    border-top: 1px solid var(--color-banner-green);
+    margin: var(--space-sm) 0;
+}
+
+/* Strong / em */
+.rca-section__content strong,
+.rca-section__content b { font-weight: var(--weight-bold); }
+
+.rca-section__content em,
+.rca-section__content i  { font-style: italic; }
+
+/* Unavailable placeholder */
+.section-unavailable {
+    font-style: italic;
+    color: var(--color-secondary-text);
+    padding: var(--space-2xs) 0;
+    font-size: 10.5pt;
+}
+
 
 /* ============================================================
-   ATTACHMENTS SECTION
+   ATTACHMENTS BLOCK
    ============================================================ */
 
-.attachments-heading {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-    font-size: 12pt;
-    font-weight: 700;
-    color: #000000;
-    margin-top: 20pt;
-    margin-bottom: 10pt;
+.attachments-block {
+    margin-top: var(--space-lg);
+    margin-bottom: var(--space-md);
 }
 
-.attachment-wrapper {
-    margin-bottom: 14pt;
-    border: 1.3px solid #37A533;
+.attachments-block__heading {
+    font-size: 12pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    margin-bottom: var(--space-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3xs);
+}
+
+.attachment-figure {
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--color-banner-green);
+    border-radius: var(--radius-sm);
     overflow: hidden;
 }
 
@@ -395,54 +898,99 @@ body {
     display: block;
 }
 
+.attachment-caption {
+    font-size: 9pt;
+    color: var(--color-secondary-text);
+    text-align: center;
+    padding: var(--space-3xs) var(--space-2xs);
+    background: var(--color-tint-bg);
+    border-top: 1px solid var(--color-banner-green);
+}
+
+
 /* ============================================================
-   APPROVAL SIGN-OFF SECTION
-   Same green border / heading style as ATTACHMENTS, with a
-   two-column table (label | value) matching the info-table look.
+   APPROVAL SIGN-OFF BLOCK
    ============================================================ */
 
-.approval-heading {
-    font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+.approval-block {
+    margin-top: var(--space-lg);
+    margin-bottom: var(--space-md);
+    border-top: 1.5px solid var(--color-banner-green);
+    padding-top: var(--space-sm);
+}
+
+.approval-block__heading {
     font-size: 12pt;
-    font-weight: 700;
-    color: #000000;
-    margin-top: 20pt;
-    margin-bottom: 10pt;
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    margin-bottom: var(--space-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-normal);
 }
 
 .approval-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12pt;
+    font-size: 11pt;
+    border: 1.5px solid var(--color-banner-green);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.approval-table thead tr {
+    background: var(--color-banner-green);
+    color: var(--color-white);
+}
+
+.approval-table thead th {
+    padding: var(--space-2xs) var(--space-xs);
+    font-weight: var(--weight-bold);
+    text-align: left;
+    border: 1px solid var(--color-banner-green);
+    font-size: 10pt;
+    letter-spacing: var(--tracking-normal);
+    text-transform: uppercase;
 }
 
 .approval-table tr {
-    border: 1.3px solid #37A533;
+    border: 1px solid var(--color-banner-green);
 }
 
 .approval-table td {
-    padding: 4pt 5.7pt;
+    padding: var(--space-2xs) var(--space-xs);
     vertical-align: middle;
-    border: 1.3px solid #37A533;
-    font-size: 12pt;
-    color: #000000;
-    line-height: 1.72;
+    border: 1px solid var(--color-banner-green);
+    line-height: 1.5;
+    color: var(--color-body-text);
 }
 
 .approval-table td.approval-label {
-    font-weight: 700;
-    width: 52.6mm;
+    font-weight: var(--weight-bold);
+    width: 50mm;
+    background: var(--color-light-green-bg);
+    color: var(--color-banner-green);
     white-space: nowrap;
-    background: #ffffff;
+    font-size: 10.5pt;
+}
+
+.approval-table__role-col { width: 50mm; }
+.approval-table__name-col { width: auto; }
+.approval-table__sig-col  { width: 38mm; }
+
+.approval-table td.approval-sig {
+    min-height: 18pt;
+    background: var(--color-tint-bg);
 }
 
 .approval-table td.approval-value {
-    font-weight: 400;
-    background: #ffffff;
+    background: var(--color-white);
+    font-weight: var(--weight-semibold);
 }
 
+
 /* ============================================================
-   SECTION DIVIDER - separates multiple issues (page break on print)
+   SECTION DIVIDER  (between issues)
+   Screen: dashed line.  Print: hard page break.
    ============================================================ */
 
 .section-divider {
@@ -454,28 +1002,45 @@ body {
 
 @media screen {
     .section-divider {
-        border-top: 1.5px dashed #cccccc;
-        margin-top: 28pt;
-        margin-bottom: 0;
+        border-top: 1.5px dashed var(--color-secondary-text);
+        margin-top: var(--space-xl);
         height: auto;
+        opacity: 0.4;
     }
 }
 
+
 /* ============================================================
    DOCUMENT FOOTER
-   Small, muted, centered metadata line at the end of the document.
    ============================================================ */
 
 .document-footer {
-    margin-top: 24pt;
-    padding-top: 8pt;
-    border-top: 1px solid #cccccc;
-    font-size: 8.5pt;
-    color: #666666;
+    margin-top: var(--space-lg);
+    padding-top: var(--space-xs);
+    border-top: 1.5px solid var(--color-banner-green);
+    font-size: 9pt;
+    color: var(--color-secondary-text);
     text-align: center;
     line-height: 1.5;
 }
 
-.document-footer div + div {
-    margin-top: 2pt;
+.document-footer__brand {
+    font-weight: var(--weight-bold);
+    color: var(--color-banner-green);
+    margin-bottom: var(--space-3xs);
+    font-size: 9.5pt;
+    letter-spacing: var(--tracking-tight);
+}
+
+.document-footer__meta {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+    color: var(--color-secondary-text);
+}
+
+.document-footer__sep {
+    color: var(--color-secondary-text);
+    opacity: 0.4;
 }

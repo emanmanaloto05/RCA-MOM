@@ -1,0 +1,103 @@
+{
+  "task_monitoring_data": {
+    "issue_logs_id": "EIL_PRESENT_FINAL",
+    "title": "Approval Flow does not Take Effect if Updated",
+    "product": "Lotus",
+    "client": "AMC",
+    "issue_type": "Issue/Error",
+    "issue_description": "Approval flow does not take effect when the approval flow setup is updated after a Disciplinary Action record has already been created. This blocks all approvers assigned under AMC's Disciplinary Action workflow from seeing the Approve and Reject buttons on existing DA records whenever HR updates the approval flow configuration, forcing approvers to either escalate manually outside the system or wait for unresolved disciplinary cases to pile up. Because disciplinary actions are time-sensitive and often tied to compliance and audit deadlines, every day a DA record sits unapproved increases AMC's exposure to missed disciplinary timelines and potential labor-compliance findings during HR audits.",
+    "implement_status": "For Testing",
+    "pre_condition": "A Disciplinary Action record exists and Approval Flow Setup is configured for the module. As of the report date, 14 active Disciplinary Action records for AMC are affected because the approval flow setup was updated after those records were created.",
+    "test_steps": "1. File a Disciplinary Action record.\n2. Update the Approval Flow Setup after the DA record is created.\n3. Log in as the assigned approver.\n4. Open the existing DA record.\n5. Verify whether the Approve and Reject buttons are displayed.",
+    "expected_result": "The approver should see the Approve and Reject buttons based on the latest approval flow configuration.",
+    "recommended_solution": "Ensure that existing Disciplinary Action records reload or refresh the latest approval flow configuration after approval-flow setup changes, so that HR approvers regain the ability to approve or reject pending disciplinary cases without manual workarounds and AMC's disciplinary case backlog does not continue to grow.",
+    "error_message": null,
+    "urgency_level": "U4 - Low",
+    "impact_level": "I4 - Low",
+    "priority_level": "P4 - Low",
+    "module": "Disciplinary Action",
+    "core_function": "NaveeWorkforce",
+    "is_recurring": false
+  },
+  "github_pr": {
+    "pr_number": 1,
+    "pr_url": "https://github.com/TechIgnite-Business-Solutions-Inc/rnd-rca-gen/pull/1",
+    "branch_name": "fix/approval-flow-refresh",
+    "affected_modules": [
+      "Disciplinary Action",
+      "Approval Flow",
+      "ApprovalFlowService"
+    ],
+    "fixed_summary": "Added approval flow refresh logic so the system reloads the latest approval configuration when approval-flow setup changes are detected for existing Disciplinary Action records.",
+    "prevention_steps": "Add regression test cases for Disciplinary Action approval-flow updates.",
+    "owner_review": "Reviewed by the module owner."
+  },
+  "developer_issue_data": {
+    "dev_status": "For Testing",
+    "pic_dev": "Jomar Talambayan",
+    "dev_resolved_on": "2026-06-10T09:30:00Z",
+    "dev_end_date": "2026-06-10T17:00:00Z",
+    "affected_component": "ApprovalFlowService",
+    "root_cause": "The approval workflow configuration is initialized only during record creation and is never re-fetched when the Approval Flow Setup is later modified.",
+    "fix_applied": "Added approval flow refresh logic that re-fetches the latest active approval configuration whenever a Disciplinary Action record is opened by an approver.",
+    "verification_result": "QA validated that Approve and Reject buttons are now displayed correctly after the approval flow setup was updated post record creation.",
+    "technical_evidence": "Approval API returned HTTP 500 when approver_id was missing from the request payload after approval flow setup was updated. Server logs showed NullReferenceException in ApprovalFlowService.GetCurrentApprover() at line 142. Of the 14 affected DA records, all 14 returned this error when an assigned approver attempted to open them after the approval flow setup change on 2026-06-08.",
+    "dev_notes": "Approval flow configuration now refreshes for existing DA records on every page load instead of relying on cached creation-time data. This directly unblocks the 14 backlogged DA records reported by AMC HR."
+  },
+  "quality_gate_data": {
+    "validation_status": "Validated",
+    "qa_status": "Passed",
+    "fc_failed_testing": 0,
+    "existing_report": false,
+    "quality_gate_first_pass": true,
+    "smoke_test_first_pass": true,
+    "reopen_count": 0,
+    "qa_validated_on": "2026-06-12T14:00:00Z",
+    "pic_qa": "Joan Marie Piñeda",
+    "remarks": "QA validated the fix across multiple approval flow configurations and confirmed no regressions. Re-tested against all 14 previously affected DA records; Approve and Reject buttons now display correctly for every record."
+  },
+  "approval_data": {
+    "prepared_by": "Jane Arianne A. Gaela",
+    "reviewed_by_dev": "Jomar Talambayan",
+    "validated_by_qa": "Joan Marie Piñeda",
+    "approved_by_owner": "Module Owner"
+  },
+  "attachments": [
+    {
+      "filename": "sample1.png",
+      "file_path": "static/images/sample1.png",
+      "content_type": "image/png",
+      "description": "Screenshot showing missing Approve and Reject buttons before the fix was applied."
+    },
+    {
+      "filename": "sample2.png",
+      "file_path": "static/images/sample2.png",
+      "content_type": "image/png",
+      "description": "Screenshot of the Approval Flow Setup configuration screen after the update."
+    },
+    {
+      "filename": "sample3.png",
+      "file_path": "static/images/sample3.png",
+      "content_type": "image/png",
+      "description": "Screenshot confirming Approve and Reject buttons display correctly after the fix."
+    }
+  ],
+  "generation_config": {
+    "incident_analysis": {
+      "provider": "openai",
+      "model": "gpt-4o"
+    },
+    "technical_impact": {
+      "provider": "gemini",
+      "model": "gemini-2.5-flash"
+    },
+    "qa_resolution": {
+      "provider": "openai",
+      "model": "gpt-4o"
+    },
+    "prevention_review": {
+      "provider": "gemini",
+      "model": "gemini-2.5-flash"
+    }
+  }
+}

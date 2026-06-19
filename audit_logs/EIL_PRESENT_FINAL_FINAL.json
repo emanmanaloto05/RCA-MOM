@@ -1,0 +1,10 @@
+{
+    "issue_id": "EIL_PRESENT_FINAL_FINAL",
+    "client": "AMC",
+    "generated_at": "2026-06-19T05:13:53.334382+00:00",
+    "generated_by": "RCA Generator",
+    "pdf_file_path": "C:\\Users\\Jane Gaela\\Desktop\\rnd_rca_gen\\outputs\\EIL_PRESENT_FINAL_FINAL_rca.pdf",
+    "status": "Draft",
+    "model": "gemini-2.5-flash",
+    "prompt_version": "prompts.yaml"
+}

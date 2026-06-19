@@ -68,15 +68,15 @@ class ProviderName(str, Enum):
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION AGENT PROVIDER CONFIG
 #
-# Allows callers to override the provider and model for each RCA section
-# agent on a per-request basis. When omitted, graph.py falls back to the
-# per-section settings in config/settings.py, which in turn fall back to
-# the global Gemini singleton.
+# Allows callers to override the provider and model for each RCA combined
+# node agent on a per-request basis. When omitted, graph.py falls back to
+# the per-section settings in config/settings.py, which in turn fall back
+# to the global Gemini singleton.
 # ─────────────────────────────────────────────────────────────────────────────
 
 class SectionProviderConfig(BaseModel):
     """
-    Per-section LLM provider override for a single RCA section agent.
+    Per-section LLM provider override for a single RCA combined node agent.
 
     Both fields must be supplied together — specifying only provider or
     only model is rejected by the validator below.
@@ -103,46 +103,42 @@ class SectionProviderConfig(BaseModel):
 class RCAGenerationConfig(BaseModel):
     """
     Optional per-request overrides for which LLM provider and model each
-    section agent should use.
+    combined node agent should use.
 
-    All fields are optional. Omitted sections fall back to the values in
+    All fields are optional. Omitted nodes fall back to the values in
     config/settings.py (environment variables), which themselves fall back
     to the global Gemini provider singleton.
 
     This model is attached to RCAInputModel.generation_config so that API
-    callers can mix providers per section without changing .env — useful
-    for A/B testing, cost optimisation, or routing critical sections to a
-    more capable model.
+    callers can mix providers per combined node without changing .env —
+    useful for A/B testing, cost optimisation, or routing critical nodes
+    to a more capable model.
 
-    Section keys map directly to the YAML section keys in prompts.yaml and
-    the state_output_key prefixes in graph.py:
-        issue_summary         → ## 1. Issue Summary
-        root_cause            → ## 2. Root Cause
-        impact_analysis       → ## 3. Impact Analysis
-        affected_module       → ## 4. Affected Module
-        quality_gate_findings → ## 5. Quality Gate Findings
-        corrective_action     → ## 6. Corrective Action
-        preventive_action     → ## 7. Preventive Action
-        owner_review          → ## 8. Owner Review
+    Combined node keys map directly to the YAML section keys in prompts.yaml
+    and the graph.py node functions:
+        incident_analysis  → generate_incident_analysis()
+                             → ## 1. Issue Summary  +  ## 2. Root Cause
+        technical_impact   → generate_technical_impact()
+                             → ## 3. Impact Analysis  +  ## 4. Affected Module
+        qa_resolution      → generate_qa_resolution()
+                             → ## 5. Quality Gate Findings  +  ## 6. Corrective Action
+        prevention_review  → generate_prevention_review()
+                             → ## 7. Preventive Action  +  ## 8. Owner Review
     """
-    issue_summary:          Optional[SectionProviderConfig] = None
-    root_cause:             Optional[SectionProviderConfig] = None
-    impact_analysis:        Optional[SectionProviderConfig] = None
-    affected_module:        Optional[SectionProviderConfig] = None
-    quality_gate_findings:  Optional[SectionProviderConfig] = None
-    corrective_action:      Optional[SectionProviderConfig] = None
-    preventive_action:      Optional[SectionProviderConfig] = None
-    owner_review:           Optional[SectionProviderConfig] = None
+    incident_analysis: Optional[SectionProviderConfig] = None
+    technical_impact:  Optional[SectionProviderConfig] = None
+    qa_resolution:     Optional[SectionProviderConfig] = None
+    prevention_review: Optional[SectionProviderConfig] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
     def get_provider(self, section_key: str) -> Optional[str]:
         """
-        Returns the provider name string for the given section key,
-        or None if no override is configured for that section.
+        Returns the provider name string for the given combined node key,
+        or None if no override is configured for that node.
 
         Args:
-            section_key: One of the eight section keys listed above.
+            section_key: One of the four combined node keys listed above.
 
         Returns:
             Provider name string (e.g. "gemini", "openai") or None.
@@ -152,11 +148,11 @@ class RCAGenerationConfig(BaseModel):
 
     def get_model(self, section_key: str) -> Optional[str]:
         """
-        Returns the model name string for the given section key,
-        or None if no override is configured for that section.
+        Returns the model name string for the given combined node key,
+        or None if no override is configured for that node.
 
         Args:
-            section_key: One of the eight section keys listed above.
+            section_key: One of the four combined node keys listed above.
 
         Returns:
             Model name string (e.g. "gemini-2.5-flash", "gpt-4o") or None.
@@ -193,13 +189,13 @@ class TaskMonitoringData(BaseModel):
 
 
 class GitHubPRData(BaseModel):
-    pr_number:        Optional[int]       = Field(default=None, gt=0)
-    pr_url:           Optional[str]       = None
-    branch_name:      Optional[str]       = None
-    affected_modules: list[str]           = Field(default_factory=list)
-    fixed_summary:    Optional[str]       = None
-    prevention_steps: Optional[str]       = None
-    owner_review:     Optional[str]       = None
+    pr_number:        Optional[int]  = Field(default=None, gt=0)
+    pr_url:           Optional[str]  = None
+    branch_name:      Optional[str]  = None
+    affected_modules: list[str]      = Field(default_factory=list)
+    fixed_summary:    Optional[str]  = None
+    prevention_steps: Optional[str]  = None
+    owner_review:     Optional[str]  = None
 
     @field_validator("pr_url")
     @classmethod
@@ -295,11 +291,11 @@ class QualityGateData(BaseModel):
     )
 
     # ── Counters and flags ────────────────────────────────────────────────────
-    fc_failed_testing:       int           = Field(default=0, ge=0)
-    existing_report:         bool          = False
+    fc_failed_testing:       int            = Field(default=0, ge=0)
+    existing_report:         bool           = False
     quality_gate_first_pass: Optional[bool] = None
     smoke_test_first_pass:   Optional[bool] = None
-    reopen_count:            int           = Field(default=0, ge=0)
+    reopen_count:            int            = Field(default=0, ge=0)
 
     # ── Optional QA metadata ──────────────────────────────────────────────────
     qa_validated_on: Optional[datetime] = None
@@ -333,21 +329,26 @@ class RCAApprovalData(BaseModel):
 
 class RCAInputModel(BaseModel):
     task_monitoring_data:  TaskMonitoringData
-    github_pr:             Optional[GitHubPRData]        = None
-    developer_issue_data:  Optional[DeveloperIssueData]  = None
-    quality_gate_data:     Optional[QualityGateData]     = None
-    approval_data:         Optional[RCAApprovalData]     = None
+    github_pr:             Optional[GitHubPRData]       = None
+    developer_issue_data:  Optional[DeveloperIssueData] = None
+    quality_gate_data:     Optional[QualityGateData]    = None
+    approval_data:         Optional[RCAApprovalData]    = None
     attachments: list[Attachment] = Field(
         default_factory=lambda: []
     )
-    
-    # Per-request section agent provider/model overrides.
+
+    # Per-request combined node agent provider/model overrides.
     # Omit entirely to use the defaults from config/settings.py.
     generation_config: Optional[RCAGenerationConfig] = None
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
+                # ── Example 1: EIL_2025000185 ────────────────────────────────
+                # Approval Flow does not Take Effect if Updated
+                # generation_config overrides incident_analysis + qa_resolution
+                # to OpenAI (root_cause + corrective_action are both inside
+                # those two combined nodes respectively).
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2025000185",
@@ -355,12 +356,32 @@ class RCAInputModel(BaseModel):
                         "product": "Lotus",
                         "client": "AMC",
                         "issue_type": "Issue/Error",
-                        "issue_description": "Approval flow does not take effect when the approval flow setup is updated after a Disciplinary Action record has already been created.",
+                        "issue_description": (
+                            "Approval flow does not take effect when the approval flow "
+                            "setup is updated after a Disciplinary Action record has "
+                            "already been created."
+                        ),
                         "implement_status": "For Testing",
-                        "pre_condition": "A Disciplinary Action record exists and Approval Flow Setup is configured for the module.",
-                        "test_steps": "1. File a Disciplinary Action record.\n2. Update the Approval Flow Setup after the DA record is created.\n3. Log in as the assigned approver.\n4. Open the existing DA record.\n5. Verify whether the Approve and Reject buttons are displayed.",
-                        "expected_result": "The approver should see the Approve and Reject buttons based on the latest approval flow configuration.",
-                        "recommended_solution": "Ensure that existing Disciplinary Action records reload or refresh the latest approval flow configuration after approval-flow setup changes.",
+                        "pre_condition": (
+                            "A Disciplinary Action record exists and Approval Flow Setup "
+                            "is configured for the module."
+                        ),
+                        "test_steps": (
+                            "1. File a Disciplinary Action record.\n"
+                            "2. Update the Approval Flow Setup after the DA record is created.\n"
+                            "3. Log in as the assigned approver.\n"
+                            "4. Open the existing DA record.\n"
+                            "5. Verify whether the Approve and Reject buttons are displayed."
+                        ),
+                        "expected_result": (
+                            "The approver should see the Approve and Reject buttons based "
+                            "on the latest approval flow configuration."
+                        ),
+                        "recommended_solution": (
+                            "Ensure that existing Disciplinary Action records reload or "
+                            "refresh the latest approval flow configuration after "
+                            "approval-flow setup changes."
+                        ),
                         "error_message": None,
                         "urgency_level": "U4 - Low",
                         "impact_level": "I4 - Low",
@@ -378,19 +399,40 @@ class RCAInputModel(BaseModel):
                             "Approval Flow",
                             "ApprovalFlowService",
                         ],
-                        "fixed_summary": "Added approval flow refresh logic so the system reloads the latest approval configuration when approval-flow setup changes are detected for existing Disciplinary Action records.",
-                        "prevention_steps": "Add regression test cases for Disciplinary Action approval-flow updates.",
+                        "fixed_summary": (
+                            "Added approval flow refresh logic so the system reloads "
+                            "the latest approval configuration when approval-flow setup "
+                            "changes are detected for existing Disciplinary Action records."
+                        ),
+                        "prevention_steps": (
+                            "Add regression test cases for Disciplinary Action "
+                            "approval-flow updates."
+                        ),
                         "owner_review": "Reviewed by the module owner.",
                     },
                     "developer_issue_data": {
                         "dev_status": "For Testing",
                         "pic_dev": "Jomar Talambayan",
                         "affected_component": "ApprovalFlowService",
-                        "root_cause": "The approval workflow configuration is initialized only during record creation.",
+                        "root_cause": (
+                            "The approval workflow configuration is initialized only "
+                            "during record creation."
+                        ),
                         "fix_applied": "Added approval flow refresh logic.",
-                        "verification_result": "QA validated that Approve and Reject buttons are now displayed correctly.",
-                        "dev_notes": "Approval flow configuration now refreshes for existing DA records.",
-                        "technical_evidence": "Approval API returned HTTP 500 when approver_id was missing from the request payload after approval flow setup was updated. Server logs showed NullReferenceException in ApprovalFlowService.GetCurrentApprover() at line 142.",
+                        "verification_result": (
+                            "QA validated that Approve and Reject buttons are now "
+                            "displayed correctly."
+                        ),
+                        "dev_notes": (
+                            "Approval flow configuration now refreshes for existing "
+                            "DA records."
+                        ),
+                        "technical_evidence": (
+                            "Approval API returned HTTP 500 when approver_id was missing "
+                            "from the request payload after approval flow setup was updated. "
+                            "Server logs showed NullReferenceException in "
+                            "ApprovalFlowService.GetCurrentApprover() at line 142."
+                        ),
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -411,10 +453,14 @@ class RCAInputModel(BaseModel):
                     },
                     "attachments": [],
                     "generation_config": {
-                        "root_cause": {"provider": "openai", "model": "gpt-4o"},
-                        "corrective_action": {"provider": "openai", "model": "gpt-4o"},
+                        "incident_analysis": {"provider": "openai", "model": "gpt-4o"},
+                        "qa_resolution":     {"provider": "openai", "model": "gpt-4o"},
                     },
                 },
+
+                # ── Example 2: EIL_2026003374 ────────────────────────────────
+                # Inconsistent Job Level validation in All Applications module
+                # generation_config is None — all nodes use settings.py defaults.
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2026003374",
@@ -422,11 +468,24 @@ class RCAInputModel(BaseModel):
                         "product": "Lotus",
                         "client": "DBTI",
                         "issue_type": "Issue/Error",
-                        "issue_description": "Job Level validation behaves inconsistently between manual application creation and imported application records.",
+                        "issue_description": (
+                            "Job Level validation behaves inconsistently between manual "
+                            "application creation and imported application records."
+                        ),
                         "implement_status": "For Testing",
-                        "pre_condition": "All Applications module is accessible and Job Level setup contains active validation rules.",
-                        "test_steps": "1. Create an application manually with Job Level data.\n2. Import an application record with Job Level data.\n3. Compare validation behavior.",
-                        "expected_result": "Manual and imported application records should follow the same Job Level validation rules.",
+                        "pre_condition": (
+                            "All Applications module is accessible and Job Level setup "
+                            "contains active validation rules."
+                        ),
+                        "test_steps": (
+                            "1. Create an application manually with Job Level data.\n"
+                            "2. Import an application record with Job Level data.\n"
+                            "3. Compare validation behavior."
+                        ),
+                        "expected_result": (
+                            "Manual and imported application records should follow the "
+                            "same Job Level validation rules."
+                        ),
                         "recommended_solution": "Standardize Job Level validation logic.",
                         "error_message": None,
                         "urgency_level": "U2 - High",
@@ -453,11 +512,23 @@ class RCAInputModel(BaseModel):
                         "dev_status": "For Testing",
                         "pic_dev": "Christian Longos",
                         "affected_component": "JobLevelValidationService",
-                        "root_cause": "Manual application creation and import processing used separate validation paths.",
-                        "fix_applied": "Updated import validation path to reuse the same Job Level validation rules.",
+                        "root_cause": (
+                            "Manual application creation and import processing used "
+                            "separate validation paths."
+                        ),
+                        "fix_applied": (
+                            "Updated import validation path to reuse the same Job Level "
+                            "validation rules."
+                        ),
                         "verification_result": "QA validated consistent validation behavior.",
                         "dev_notes": "Both creation paths now share one validation service.",
-                        "technical_evidence": "Import endpoint bypassed JobLevelValidationService.Validate() and called a legacy validateJobLevel() function directly, confirmed via stack trace in application logs showing divergent call paths for POST /api/applications vs POST /api/applications/import.",
+                        "technical_evidence": (
+                            "Import endpoint bypassed JobLevelValidationService.Validate() "
+                            "and called a legacy validateJobLevel() function directly, "
+                            "confirmed via stack trace in application logs showing divergent "
+                            "call paths for POST /api/applications vs "
+                            "POST /api/applications/import."
+                        ),
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -479,6 +550,12 @@ class RCAInputModel(BaseModel):
                     "attachments": [],
                     "generation_config": None,
                 },
+
+                # ── Example 3: EIL_2026003361 ────────────────────────────────
+                # Incorrect Adjustment Log details on Adjustment Processing
+                # generation_config overrides qa_resolution + prevention_review
+                # to OpenAI (corrective_action + preventive_action live inside
+                # those two combined nodes respectively).
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2026003361",
@@ -486,11 +563,25 @@ class RCAInputModel(BaseModel):
                         "product": "Lotus",
                         "client": "TopBond",
                         "issue_type": "Issue/Error",
-                        "issue_description": "Adjustment Log displays unnecessary entries during Adjustment Processing.",
+                        "issue_description": (
+                            "Adjustment Log displays unnecessary entries during "
+                            "Adjustment Processing."
+                        ),
                         "implement_status": "For Testing",
-                        "pre_condition": "Late approved application exists and Adjustment Processing is available.",
-                        "test_steps": "1. File a late approved application.\n2. Run Adjustment Processing.\n3. Open Adjustment Log.\n4. Validate records.",
-                        "expected_result": "Adjustment Log should only display records directly related to the processed adjustment.",
+                        "pre_condition": (
+                            "Late approved application exists and Adjustment Processing "
+                            "is available."
+                        ),
+                        "test_steps": (
+                            "1. File a late approved application.\n"
+                            "2. Run Adjustment Processing.\n"
+                            "3. Open Adjustment Log.\n"
+                            "4. Validate records."
+                        ),
+                        "expected_result": (
+                            "Adjustment Log should only display records directly related "
+                            "to the processed adjustment."
+                        ),
                         "recommended_solution": "Filter Adjustment Log output.",
                         "error_message": None,
                         "urgency_level": "U1 - Critical",
@@ -517,11 +608,23 @@ class RCAInputModel(BaseModel):
                         "dev_status": "For Testing",
                         "pic_dev": "Reymond Biol",
                         "affected_component": "AdjustmentLogService",
-                        "root_cause": "Adjustment Log retrieval was not scoped to the current processed adjustment transaction.",
+                        "root_cause": (
+                            "Adjustment Log retrieval was not scoped to the current "
+                            "processed adjustment transaction."
+                        ),
                         "fix_applied": "Updated Adjustment Log filtering condition.",
-                        "verification_result": "QA confirmed unnecessary entries no longer appear.",
+                        "verification_result": (
+                            "QA confirmed unnecessary entries no longer appear."
+                        ),
                         "dev_notes": "Filtering now uses adjustment transaction ID.",
-                        "technical_evidence": "Database query in AdjustmentLogService.GetLogs() returned 47 unrelated adjustment entries for transaction ID ADJ-2026-00391 because the WHERE clause lacked a transaction_id filter. Raw SQL log confirmed: SELECT * FROM adjustment_log WHERE employee_id = :emp_id (missing AND transaction_id = :txn_id).",
+                        "technical_evidence": (
+                            "Database query in AdjustmentLogService.GetLogs() returned "
+                            "47 unrelated adjustment entries for transaction ID "
+                            "ADJ-2026-00391 because the WHERE clause lacked a "
+                            "transaction_id filter. Raw SQL log confirmed: "
+                            "SELECT * FROM adjustment_log WHERE employee_id = :emp_id "
+                            "(missing AND transaction_id = :txn_id)."
+                        ),
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",
@@ -545,28 +648,51 @@ class RCAInputModel(BaseModel):
                             "filename": "adjustment_log_sample.pdf",
                             "file_path": "uploads/EIL_2026003361/adjustment_log_sample.pdf",
                             "content_type": "application/pdf",
-                            "description": "Sample Adjustment Log showing unnecessary entries before filtering correction.",
+                            "description": (
+                                "Sample Adjustment Log showing unnecessary entries "
+                                "before filtering correction."
+                            ),
                         }
                     ],
                     "generation_config": {
-                        "root_cause": {"provider": "gemini", "model": "gemini-2.5-flash"},
-                        "corrective_action": {"provider": "openai", "model": "gpt-4o"},
-                        "preventive_action": {"provider": "openai", "model": "gpt-4o"},
+                        "qa_resolution":     {"provider": "openai", "model": "gpt-4o"},
+                        "prevention_review": {"provider": "openai", "model": "gpt-4o"},
                     },
                 },
+
+                # ── Example 4: EIL_2026003509 ────────────────────────────────
+                # Attendance Summary computation of Work and Absent Hours for
+                # Straight Time — generation_config is None.
                 {
                     "task_monitoring_data": {
                         "issue_logs_id": "EIL_2026003509",
-                        "title": "Attendance Summary computation of Work and Absent Hours for Straight Time",
+                        "title": (
+                            "Attendance Summary computation of Work and Absent Hours "
+                            "for Straight Time"
+                        ),
                         "product": "Lotus",
                         "client": "Mamasitas",
                         "issue_type": "Issue/Error",
-                        "issue_description": "Attendance Summary displays incorrect work hours and absent hours for straight-time schedules.",
+                        "issue_description": (
+                            "Attendance Summary displays incorrect work hours and absent "
+                            "hours for straight-time schedules."
+                        ),
                         "implement_status": "For Testing",
-                        "pre_condition": "Employee is assigned to a straight-time work schedule.",
-                        "test_steps": "1. Assign employee to straight-time schedule.\n2. Generate attendance logs.\n3. Open Attendance Summary.\n4. Compare computed hours.",
-                        "expected_result": "Work hours and absent hours should be computed correctly.",
-                        "recommended_solution": "Correct Attendance Summary computation logic.",
+                        "pre_condition": (
+                            "Employee is assigned to a straight-time work schedule."
+                        ),
+                        "test_steps": (
+                            "1. Assign employee to straight-time schedule.\n"
+                            "2. Generate attendance logs.\n"
+                            "3. Open Attendance Summary.\n"
+                            "4. Compare computed hours."
+                        ),
+                        "expected_result": (
+                            "Work hours and absent hours should be computed correctly."
+                        ),
+                        "recommended_solution": (
+                            "Correct Attendance Summary computation logic."
+                        ),
                         "error_message": None,
                         "urgency_level": "U2 - High",
                         "impact_level": "I2 - High",
@@ -592,11 +718,26 @@ class RCAInputModel(BaseModel):
                         "dev_status": "For Testing",
                         "pic_dev": "Lovely Bactol",
                         "affected_component": "AttendanceSummaryComputationService",
-                        "root_cause": "Straight-time schedule computation did not consistently apply the expected scheduled work-hour basis.",
+                        "root_cause": (
+                            "Straight-time schedule computation did not consistently "
+                            "apply the expected scheduled work-hour basis."
+                        ),
                         "fix_applied": "Updated attendance computation logic.",
-                        "verification_result": "QA confirmed work hours and absent hours are correct.",
-                        "dev_notes": "Schedule basis is now resolved per employee schedule assignment.",
-                        "technical_evidence": "AttendanceSummaryComputationService.ComputeHours() applied a default 8-hour basis instead of the employee's assigned straight-time schedule hours (7.5 hrs), confirmed via debug log showing schedule_basis=DEFAULT for employee ID EMP-20045 on 2026-05-12. Computed work_hours=8.0 vs expected 7.5, absent_hours=0.5 vs expected 0.0.",
+                        "verification_result": (
+                            "QA confirmed work hours and absent hours are correct."
+                        ),
+                        "dev_notes": (
+                            "Schedule basis is now resolved per employee schedule "
+                            "assignment."
+                        ),
+                        "technical_evidence": (
+                            "AttendanceSummaryComputationService.ComputeHours() applied "
+                            "a default 8-hour basis instead of the employee's assigned "
+                            "straight-time schedule hours (7.5 hrs), confirmed via debug "
+                            "log showing schedule_basis=DEFAULT for employee ID EMP-20045 "
+                            "on 2026-05-12. Computed work_hours=8.0 vs expected 7.5, "
+                            "absent_hours=0.5 vs expected 0.0."
+                        ),
                     },
                     "quality_gate_data": {
                         "validation_status": "Validated",

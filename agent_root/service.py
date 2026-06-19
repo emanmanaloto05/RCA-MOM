@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+import markdown as markdown_lib
 
 from agent_root.graph import GraphBuildError, RCAGraphState, get_rca_graph
 from agent_root.models import (
@@ -28,6 +29,16 @@ from common.utils import sanitize_issue_id
 from config.settings import settings
 
 logger = logging.getLogger("rca_generator.service")
+
+# ---------------------------------------------------------------------------
+# Anchor all static asset paths to the location of THIS file, not to the
+# process's current working directory. Without this, LOGO_PATH/CSS_PATH
+# resolve relative to whatever directory the script happened to be launched
+# from (e.g. a different cwd when run via cron, Lark bot subprocess, or a
+# different entrypoint), causing Playwright to silently render the PDF
+# without the logo or CSS even though the files exist on disk.
+# ---------------------------------------------------------------------------
+BASE_DIR: Path = Path(__file__).resolve().parents[1]
 
 
 class RCAServiceError(RuntimeError):
@@ -44,6 +55,7 @@ class RCASectionData:
     core_function: str
 
     cause: str = "Not specified."
+    affected_module: str = "Not specified."
     impact_analysis: str = "Not specified."
     solution: str = "Not specified."
     preventive_action: str = "Not specified."
@@ -56,8 +68,8 @@ class RCASectionData:
     qa_status: str = "N/A"
     pic_qa: str = "N/A"
 
-    attachments: list[str] = field(
-        default_factory=lambda: cast(list[str], [])
+    attachments: list[dict[str, Any]] = field(
+        default_factory=lambda: cast(list[dict[str, Any]], [])
     )
 
 
@@ -83,6 +95,13 @@ def extract_markdown_sections(markdown_rca: str) -> dict[str, str]:
                 "## Root Cause",
                 "## 2. Cause",
                 "## Cause",
+            ],
+        ),
+        "affected_module": _extract_section(
+            markdown_rca,
+            [
+                "## 4. Affected Module",
+                "## Affected Module",
             ],
         ),
         "impact_analysis": _extract_section(
@@ -141,8 +160,149 @@ def _resolve_consultant(
     return ""
 
 
+def _path_to_file_uri(path: Path) -> str:
+    """
+    Convert a local project file path into an absolute file:// URI.
+
+    This is important because the generated HTML is saved inside outputs/.
+    If the template receives css_path='static/rca.css', the browser may look
+    for outputs/static/rca.css, which does not exist.
+
+    `path` is expected to already be an absolute path (see BASE_DIR usage
+    in LOGO_PATH/CSS_PATH below) so .resolve() here is just a safety net for
+    any symlinks / '..' segments, not the source of truth for the base dir.
+    """
+    return path.resolve().as_uri()
+
+
+IMAGE_EXTENSIONS: set[str] = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+
+
+def render_section_markdown(text: str) -> str:
+    """
+    Convert an AI-generated RCA section's Markdown text into HTML so that
+    rca.css's `.rca-section__content--ai` rules (h2/h3/h4, p, ul/ol/li,
+    table, code, pre, blockquote, strong/em, etc.) actually have real tags
+    to style.
+
+    Without this conversion, raw markdown syntax (**bold**, `code`,
+    "* bullet" lists, "## headings") was being inserted verbatim into the
+    HTML via `{{ section.cause | safe }}`, which is why the PDF showed
+    literal asterisks/backticks instead of styled bold text, code badges,
+    and bullet lists — the CSS was never broken, it simply had no <strong>,
+    <code>, or <li> tags to apply to.
+
+    Extensions used:
+        - "extra"      → tables, fenced code blocks, sane list handling,
+                          abbreviations, footnotes
+        - "sane_lists"  → prevents mixed ordered/unordered lists from
+                          merging into a single list incorrectly
+        - "nl2br"       → preserves single newlines as <br> for any prose
+                          that doesn't use full markdown paragraph breaks
+        - output_format="html" → modern HTML output (markdown's "html5" alias
+                          was removed from its type stubs; "html" produces
+                          identical output at runtime)
+    """
+    if not text or not text.strip():
+        return text
+
+    html = markdown_lib.markdown(
+        text.strip(),
+        extensions=["extra", "sane_lists", "nl2br"],
+        output_format="html",
+    )
+
+    return html
+
+
+def resolve_attachment(attachment: Any, search_dir: Path) -> dict[str, str | bool | None]:
+    """
+    Resolve a single attachment against `search_dir` (the static/images
+    folder shipped alongside this file, by default).
+
+    `attachment` can be any of:
+        - a plain string filename, e.g. "sample1.png"
+        - an `Attachment` pydantic model (or any object) exposing
+          `.file_path`, `.filename`, or `.name`
+        - anything else, which falls back to `str(attachment)`
+
+    Only the basename of whatever path/filename is supplied is used —
+    this means an `Attachment(file_path="static/images/sample1.png")`
+    and a bare `"sample1.png"` both resolve to the same file inside
+    `search_dir`, since attachments are always looked up by filename
+    within ATTACHMENTS_DIR rather than by their original full path.
+
+    Returns a dict matching what rca_template.html expects:
+        { "name": str, "uri": str | None, "is_image": bool }
+
+    - If the file is not found on disk, "uri" is None and the template
+      renders an "Attachment not found" notice instead of a broken
+      <img>/link.
+    - "is_image" is True for common image extensions, so the template
+      renders an <img> tag; otherwise it renders a clickable file:// link
+      (e.g. for .pdf, .xlsx attachments).
+    """
+    if isinstance(attachment, str):
+        filename = attachment
+    elif hasattr(attachment, "file_path"):
+        filename = str(attachment.file_path)
+    elif hasattr(attachment, "filename"):
+        filename = str(attachment.filename)
+    elif hasattr(attachment, "name"):
+        filename = str(attachment.name)
+    else:
+        filename = str(attachment)
+
+    # Normalize to just the basename so callers can pass either a bare
+    # filename ("sample1.png") or a full/relative path
+    # ("static/images/sample1.png", "uploads/EIL_.../sample1.png") and
+    # still resolve correctly against search_dir.
+    filename = Path(filename).name
+    candidate = search_dir / filename
+
+    if not candidate.exists() or not candidate.is_file():
+        logger.warning(
+            "Attachment not found on disk | name=%s | expected_path=%s",
+            filename,
+            candidate,
+        )
+        return {"name": filename, "uri": None, "is_image": False}
+
+    return {
+        "name": filename,
+        "uri": candidate.resolve().as_uri(),
+        "is_image": filename.lower().endswith(
+            (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")
+        ),
+    }
+
+
+def resolve_attachments(
+    attachments: list[Any] | None,
+    search_dir: Path,
+) -> list[dict[str, Any]]:
+    if not attachments:
+        return []
+
+    return [resolve_attachment(item, search_dir) for item in attachments]
+
+
+def _verify_static_asset(path: Path, label: str) -> None:
+    """
+    Log (rather than silently ignore) when a required static asset is
+    missing on disk, so a broken logo/CSS in the PDF surfaces as a clear
+    warning in the logs instead of an unexplained visual bug.
+    """
+    if not path.exists():
+        logger.warning(
+            "Static asset missing on disk | label=%s | expected_path=%s",
+            label,
+            path,
+        )
+
+
 def cleanup_old_outputs(days: int = 30) -> None:
-    output_dir = Path("outputs")
+    output_dir = BASE_DIR / "outputs"
 
     if not output_dir.exists():
         return
@@ -174,8 +334,23 @@ def cleanup_old_outputs(days: int = 30) -> None:
 
 
 def _generate_pdf_from_html(html_path: Path, pdf_path: Path) -> None:
+    """
+    Convert an HTML file to PDF using Playwright's Chromium engine.
+
+    CRITICAL — margin handling:
+    Do NOT pass Playwright-level top/bottom/left/right margins here.
+    All page margins (including the top band that houses the running
+    header) are declared in CSS via @page { margin: ... } in rca.css.
+    Mixing Playwright margins with CSS @page margins causes them to
+    stack, so the header clearance doubles and content is pushed down
+    too far on every page.
+
+    Always pass all four margins as "0" and let CSS own the layout.
+    prefer_css_page_size=True ensures Playwright respects the A4 size
+    declared in @page { size: A4 } rather than overriding it.
+    """
     try:
-        from playwright.sync_api import sync_playwright  # type: ignore[import-untyped]
+        from playwright.sync_api import sync_playwright
 
         logger.info(
             "Playwright: converting HTML to PDF | html=%s | pdf=%s",
@@ -187,18 +362,29 @@ def _generate_pdf_from_html(html_path: Path, pdf_path: Path) -> None:
             browser = p.chromium.launch()
             page = browser.new_page()
 
-            page.goto(html_path.resolve().as_uri())
-            page.wait_for_load_state("networkidle")
+            page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
 
+            # ----------------------------------------------------------------
+            # DO NOT set non-zero Playwright margins here.
+            # CSS @page { margin: 32mm 16mm 18mm 16mm } in rca.css owns all
+            # page margins. The fixed .header is positioned at top:8mm within
+            # the 32mm top band, so content always starts below the header on
+            # every page without any Playwright-side margin assistance.
+            #
+            # prefer_css_page_size=True ensures Playwright respects the A4
+            # size declared in @page { size: A4 } in rca.css rather than
+            # silently overriding it with its own default page size.
+            # ----------------------------------------------------------------
             page.pdf(
                 path=str(pdf_path),
                 format="A4",
                 print_background=True,
+                prefer_css_page_size=True,
                 margin={
-                    "top": "16mm",
-                    "bottom": "20mm",
-                    "left": "18mm",
-                    "right": "18mm",
+                    "top": "0",
+                    "bottom": "0",
+                    "left": "0",
+                    "right": "0",
                 },
             )
 
@@ -231,7 +417,7 @@ def save_audit_log(
     status: str,
     model: str,
 ) -> None:
-    audit_dir = Path("audit_logs")
+    audit_dir = BASE_DIR / "audit_logs"
     audit_dir.mkdir(parents=True, exist_ok=True)
 
     audit_data: dict[str, str | None] = {
@@ -259,12 +445,125 @@ def save_audit_log(
     logger.info("Audit log written | path=%s", audit_file)
 
 
+def _build_fallback_markdown(
+    rca_input: RCAInputModel,
+    issue_id: str,
+) -> str:
+    task = rca_input.task_monitoring_data
+    dev = rca_input.developer_issue_data
+    qg = rca_input.quality_gate_data
+
+    root_cause = (
+        dev.root_cause
+        if dev and dev.root_cause
+        else "AI generation was unavailable. Root cause must be reviewed manually."
+    )
+
+    fix_applied = (
+        dev.fix_applied
+        if dev and dev.fix_applied
+        else "AI generation was unavailable. Corrective action must be completed manually."
+    )
+
+    verification = (
+        dev.verification_result
+        if dev and dev.verification_result
+        else "Verification result was not available."
+    )
+
+    evidence = (
+        dev.technical_evidence
+        if dev and dev.technical_evidence
+        else "Technical evidence was not available."
+    )
+
+    affected_component = (
+        dev.affected_component
+        if dev and dev.affected_component
+        else task.module
+    )
+
+    validation_status = (
+        qg.validation_status.value
+        if qg and qg.validation_status
+        else "N/A"
+    )
+
+    qa_status = (
+        qg.qa_status.value
+        if qg and qg.qa_status
+        else "N/A"
+    )
+
+    quality_gate_first_pass = _bool_to_pass_fail(
+        qg.quality_gate_first_pass if qg else None
+    )
+
+    smoke_test_first_pass = _bool_to_pass_fail(
+        qg.smoke_test_first_pass if qg else None
+    )
+
+    reopen_count = qg.reopen_count if qg else 0
+    fc_failed_testing = qg.fc_failed_testing if qg else 0
+
+    return f"""## 1. Issue Summary
+Issue {issue_id} affects the {task.module} module in {task.product} for {task.client}.
+The reported issue is: {task.issue_description}
+
+## 2. Root Cause
+{root_cause}
+
+Technical evidence: {evidence}
+
+## 3. Impact Analysis
+The issue affects the {task.module} module under {task.core_function}.
+Urgency: {task.urgency_level.value}
+Impact: {task.impact_level.value}
+Priority: {task.priority_level.value}
+
+## 4. Affected Module
+Product: {task.product}
+Module: {task.module}
+Core Function: {task.core_function}
+Affected Component: {affected_component}
+
+## 5. Quality Gate Findings
+Validation Status: {validation_status}
+QA Status: {qa_status}
+Quality Gate First Pass: {quality_gate_first_pass}
+Smoke Test First Pass: {smoke_test_first_pass}
+Reopen Count: {reopen_count}
+FC Failed Testing: {fc_failed_testing}
+
+## 6. Corrective Action
+{fix_applied}
+
+Verification Result: {verification}
+
+## 7. Preventive Action
+Add regression testing for this module and verify that the same issue does not recur after future changes.
+
+## 8. Owner Review
+Owner review is pending. This RCA was generated in testing mode because AI provider quota was unavailable.
+"""
+
+
 class RCAService:
-    TEMPLATE_DIR: Path = Path("templates")
+    TEMPLATE_DIR: Path = BASE_DIR / "templates"
     TEMPLATE_NAME: str = "rca_template.html"
-    OUTPUT_DIR: Path = Path("outputs")
-    LOGO_PATH: str = "static/images/direc_logo.png"
-    CSS_PATH: str = "static/rca.css"
+    OUTPUT_DIR: Path = BASE_DIR / "outputs"
+
+    # Anchored to BASE_DIR (this file's directory) instead of a bare
+    # relative path, so resolution no longer depends on the process cwd.
+    # Matches the on-disk layout:
+    #   static/images/direc_logo.png
+    #   static/rca.css
+    LOGO_PATH: Path = BASE_DIR / "static" / "images" / "direc_logo.png"
+    CSS_PATH: Path = BASE_DIR / "static" / "rca.css"
+
+    # Folder where attachment image/files (e.g. sample1.png, sample2.png,
+    # sample3.png) live, matching the static/images layout in your project.
+    ATTACHMENTS_DIR: Path = BASE_DIR / "static" / "images"
 
     @classmethod
     async def generate_rca(cls, rca_input: RCAInputModel) -> RCAOutputModel:
@@ -282,6 +581,8 @@ class RCAService:
         initial_state: RCAGraphState = {
             "rca_input": rca_input,
         }
+
+        final_state: dict[str, Any]
 
         try:
             graph: Any = get_rca_graph()
@@ -318,43 +619,55 @@ class RCAService:
                 issue_id,
                 exc,
             )
-            raise RCAServiceError(
-                f"RCA workflow failed for issue {issue_id}."
-            ) from exc
 
-        if not final_state.get("review_passed", False):
-            error_detail = (
+            if not settings.allow_degraded_rca:
+                raise RCAServiceError(
+                    f"RCA workflow failed for issue {issue_id}: {exc}"
+                ) from exc
+
+            fallback_markdown = _build_fallback_markdown(rca_input, issue_id)
+            final_state = cast(
+                dict[str, Any],
+                {
+                    "review_passed": True,
+                    "review_notes": "Fallback RCA generated after graph failure.",
+                    "rca_output": RCAOutputModel(
+                        issue_id=issue_id,
+                        markdown_rca=fallback_markdown,
+                    ),
+                    "generation_error": str(exc),
+                },
+            )
+
+        if not bool(final_state.get("review_passed", False)):
+            error_detail = str(
                 final_state.get("generation_error")
                 or final_state.get("review_notes")
                 or "Unknown RCA review failure."
             )
 
-            logger.error(
-                "RCA review failed | issue_id=%s | detail=%s",
+            logger.warning(
+                "RCA did not pass review | issue_id=%s | detail=%s",
                 issue_id,
                 error_detail,
             )
 
             raise RCAServiceError(
-                f"RCA generation did not pass review for issue {issue_id}: "
-                f"{error_detail}"
+                f"RCA did not pass review for issue {issue_id}: {error_detail}"
             )
 
-        rca_output = final_state.get("rca_output")
+        rca_output_raw: Any = final_state.get("rca_output")
 
-        if not isinstance(rca_output, RCAOutputModel):
-            logger.error(
-                "Invalid or missing RCA output | issue_id=%s | type=%s",
-                issue_id,
-                type(rca_output).__name__,
-            )
+        if not isinstance(rca_output_raw, RCAOutputModel):
             raise RCAServiceError(
-                f"RCA output is missing or invalid for issue {issue_id}."
+                f"RCA output missing or invalid for issue {issue_id}."
             )
+
+        rca_output: RCAOutputModel = rca_output_raw
 
         if not rca_output.markdown_rca.strip():
             raise RCAServiceError(
-                f"Generated RCA markdown is empty for issue {issue_id}."
+                f"RCA markdown is empty for issue {issue_id}."
             )
 
         html_file_path = cls.generate_html_file(
@@ -366,9 +679,6 @@ class RCAService:
             html_path=Path(html_file_path),
         )
 
-        # Store the actual filesystem PDF path so callers can verify the file
-        # and the path ends with ".pdf".  The download URL for API consumers
-        # can be derived separately from issue_id when needed.
         rca_output.pdf_file_path = pdf_file_path
         rca_output.approval_status = ApprovalStatus.DRAFT
 
@@ -401,6 +711,7 @@ class RCAService:
         issue_id = sanitize_issue_id(
             rca_input.task_monitoring_data.issue_logs_id
         )
+
         output_path = cls.OUTPUT_DIR / f"{issue_id}_rca.html"
 
         html_content = cls.render_html(
@@ -477,6 +788,27 @@ class RCAService:
             else sections.get("owner_review", "Pending owner review.")
         )
 
+        affected_module_raw = sections.get("affected_module", "Not specified.")
+
+        if affected_module_raw == "Not specified.":
+            affected_module = (
+                f"Product: {task.product}<br>"
+                f"Module: {task.module}<br>"
+                f"Core Function: {task.core_function}"
+            )
+        else:
+            affected_module = affected_module_raw
+
+        # Attachments live on rca_input.attachments as a list of
+        # `Attachment` pydantic models (see models.py). resolve_attachment()
+        # accepts either those model instances (reading `.file_path`) or
+        # plain string filenames, so this works whether the caller sends
+        # full Attachment objects or a bare list of filenames.
+        resolved_attachments = resolve_attachments(
+            attachments=rca_input.attachments,
+            search_dir=cls.ATTACHMENTS_DIR,
+        )
+
         rca_section = RCASectionData(
             issue_number=1,
             issue_title=task.title,
@@ -484,36 +816,49 @@ class RCAService:
             product=task.product,
             module=task.module,
             core_function=task.core_function,
-            cause=sections.get("cause", "Not specified."),
-            impact_analysis=sections.get(
-                "impact_analysis",
-                "Not specified.",
+            cause=render_section_markdown(sections.get("cause", "Not specified.")),
+            affected_module=render_section_markdown(affected_module),
+            impact_analysis=render_section_markdown(
+                sections.get("impact_analysis", "Not specified.")
             ),
-            solution=sections.get("solution", "Not specified."),
-            preventive_action=sections.get(
-                "preventive_action",
-                "Not specified.",
+            solution=render_section_markdown(
+                sections.get("solution", "Not specified.")
             ),
-            owner_review=owner_review,
+            preventive_action=render_section_markdown(
+                sections.get("preventive_action", "Not specified.")
+            ),
+            owner_review=render_section_markdown(owner_review),
             quality_gate_pass=qg_pass,
             smoke_test_pass=smoke_pass,
             reopen_count=reopen,
             fc_failed=fc_failed,
             qa_status=qa_status,
             pic_qa=pic_qa,
-            attachments=[],
+            attachments=resolved_attachments,
+        )
+
+        # Verify the assets exist on disk before generating the file:// URIs,
+        # so a missing/misnamed file produces a clear log warning instead of
+        # a silently broken logo/CSS in the final PDF.
+        _verify_static_asset(cls.LOGO_PATH, "logo")
+        _verify_static_asset(cls.CSS_PATH, "css")
+
+        css_uri = _path_to_file_uri(cls.CSS_PATH)
+        logo_uri = _path_to_file_uri(cls.LOGO_PATH)
+
+        logger.debug(
+            "Resolved static asset URIs | css=%s | logo=%s",
+            css_uri,
+            logo_uri,
         )
 
         return template.render(
             task=task,
             all_issue_titles=[task.title],
             generated_date=datetime.now().strftime("%B %d, %Y"),
-            assigned_consultant=_resolve_consultant(
-                developer,
-                quality,
-            ),
+            assigned_consultant=_resolve_consultant(developer, quality),
             approval_status=rca_output.approval_status.value,
             rca_sections=[rca_section],
-            logo_path=cls.LOGO_PATH,
-            css_path=cls.CSS_PATH,
+            logo_path=logo_uri,
+            css_path=css_uri,
         )

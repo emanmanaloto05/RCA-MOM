@@ -3,255 +3,327 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Root Cause Analysis</title>
-    <link rel="stylesheet" href="../{{ css_path }}">
+    <title>Root Cause Analysis — {{ task.issue_logs_id }}</title>
+    <link rel="stylesheet" href="{{ css_path }}">
 </head>
 
 <body>
-<div class="page">
 
-    <div class="header">
-        <div class="page-header-logo">
-            <img src="../{{ logo_path }}" class="logo" alt="direc logo">
+<div class="header" role="banner" aria-label="Document header">
+    <div class="page-header-logo">
+        <img src="{{ logo_path }}" class="logo" alt="direc Business Technologies Inc. logo">
+    </div>
+
+    <div class="page-header-details">
+        <div class="detail-row">
+            <span class="detail-text">4F. Victoria One Bldg. 1670 Quezon Ave.</span>
         </div>
-
-        <div class="page-header-details">
-            <div class="detail-row">
-                <span class="detail-text">4F. Victoria One Bldg. 1670 Quezon Ave.</span>
-                <span class="icon-spacer"></span>
-            </div>
-
-            <div class="detail-row">
-                <span class="detail-text">South Triangle, Quezon City, Philippines.</span>
-                <span class="icon-spacer"></span>
-            </div>
-
-            <div class="detail-row">
-                <span class="detail-text">www.direcbusiness.com</span>
-                <span class="detail-icon">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10
-                                 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49
-                                 -7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9
-                                 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81
-                                 -1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2
-                                 c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41
-                                 c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1
-                                 5.39z"/>
-                    </svg>
-                </span>
-            </div>
-
-            <div class="detail-row">
-                <span class="detail-text">(02) 8555 1547</span>
-                <span class="detail-icon">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2
-                                 -2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57
-                                 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1
-                                 -9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5
-                                 c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35
-                                 .03.74-.25 1.02l-2.2 2.2z"/>
-                    </svg>
-                </span>
-            </div>
+        <div class="detail-row">
+            <span class="detail-text">South Triangle, Quezon City, Philippines.</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">www.direcbusiness.com</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">(02) 8555 1547</span>
         </div>
     </div>
+</div>
+
+<div class="page">
 
     <h1 class="main-title">Root Cause Analysis (RCA)</h1>
 
-    <table class="info-table">
+    <table class="info-table" aria-label="Document information">
         <tbody>
             <tr>
                 <td class="label"><strong>Company Name:</strong></td>
                 <td class="value bold"><strong>{{ task.client }}</strong></td>
             </tr>
-
             <tr>
                 <td class="label"><strong>Purpose:</strong></td>
                 <td class="value">Root Cause Analysis (RCA)</td>
             </tr>
-
             <tr>
                 <td class="label"><strong>Date:</strong></td>
                 <td class="value">{{ generated_date }}</td>
             </tr>
-
             <tr>
                 <td class="label"><strong>Issue ID:</strong></td>
                 <td class="value">{{ task.issue_logs_id }}</td>
             </tr>
-
             <tr>
                 <td class="label"><strong>Issue:</strong></td>
                 <td class="value">
-                    {%- for title in all_issue_titles %}
+                    {% for title in all_issue_titles %}
                         {{ title }}{% if not loop.last %}<br>{% endif %}
-                    {%- endfor %}
+                    {% endfor %}
                 </td>
             </tr>
-
             <tr>
                 <td class="label"><strong>Assigned Consultant:</strong></td>
-                <td class="value">{{ assigned_consultant if assigned_consultant else "" }}</td>
+                <td class="value">{{ assigned_consultant }}</td>
             </tr>
-
             <tr>
                 <td class="label"><strong>Approval Status:</strong></td>
-                <td class="value">{{ approval_status }}</td>
+                <td class="value">
+                    <span class="approval-badge approval-badge--pending">
+                        {{ approval_status }}
+                    </span>
+                </td>
             </tr>
         </tbody>
     </table>
 
     {% for section in rca_sections %}
 
-    <div class="issue-heading">
-        Issue No. {{ section.issue_number }}
-    </div>
+    {% if not loop.first %}
+        <hr class="section-divider">
+    {% endif %}
 
-    <div class="issue-subheading">
-        {{ section.issue_title }}
-    </div>
+    <article class="issue-article" aria-label="Issue {{ section.issue_number }}: {{ section.issue_title }}">
 
-    <table class="rca-table">
-        <thead>
-            <tr>
-                <th class="rca-header-cell">Root Cause Analysis</th>
-            </tr>
-        </thead>
+        <div class="issue-header-block">
+            <div class="issue-eyebrow">Issue No. {{ section.issue_number }}</div>
+            <div class="issue-title-text">{{ section.issue_title }}</div>
+        </div>
 
-        <tbody>
-            <tr>
-                <td class="section-title">ISSUE</td>
-            </tr>
+        <div class="issue-meta-strip">
+            <span class="meta-pill">
+                <span class="meta-pill__label">Product</span>
+                <span class="meta-pill__value">{{ section.product }}</span>
+            </span>
+            <span class="meta-pill">
+                <span class="meta-pill__label">Module</span>
+                <span class="meta-pill__value">{{ section.module }}</span>
+            </span>
+            <span class="meta-pill">
+                <span class="meta-pill__label">Core Function</span>
+                <span class="meta-pill__value">{{ section.core_function }}</span>
+            </span>
+        </div>
 
-            <tr>
-                <td class="section-content">
-                    <ul>
-                        <li>{{ section.issue_description }}</li>
-                        <li>Product: {{ section.product }}</li>
-                        <li>Module: {{ section.module }}</li>
-                        <li>Core Function: {{ section.core_function }}</li>
-                    </ul>
-                </td>
-            </tr>
+        <div class="rca-card">
 
-            <tr>
-                <td class="section-title">CAUSE</td>
-            </tr>
+            <div class="rca-card__header">Root Cause Analysis</div>
 
-            <tr>
-                <td class="section-content">
-                    {{ section.cause | safe }}
-                </td>
-            </tr>
+            <div class="rca-card__body">
 
-            <tr>
-                <td class="section-title">IMPACT ANALYSIS</td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">1</span>
+                        <span class="rca-section__name">Issue</span>
+                    </div>
+                    <div class="rca-section__content">
+                        <p class="rca-section__description">
+                            {{ section.issue_description }}
+                        </p>
 
-            <tr>
-                <td class="section-content">
-                    {{ section.impact_analysis | safe }}
-                </td>
-            </tr>
+                        <div class="key-facts-grid">
+                            <div class="key-fact">
+                                <span class="key-fact__label">Product</span>
+                                <span class="key-fact__value">{{ section.product }}</span>
+                            </div>
+                            <div class="key-fact">
+                                <span class="key-fact__label">Module</span>
+                                <span class="key-fact__value">{{ section.module }}</span>
+                            </div>
+                            <div class="key-fact">
+                                <span class="key-fact__label">Core Function</span>
+                                <span class="key-fact__value">{{ section.core_function }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-title">QUALITY GATE FINDINGS</td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">2</span>
+                        <span class="rca-section__name">Root Cause</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        {{ section.cause | safe }}
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-content">
-                    <ul>
-                        <li>Quality Gate First Pass: {{ section.quality_gate_pass }}</li>
-                        <li>Smoke Test First Pass: {{ section.smoke_test_pass }}</li>
-                        <li>Reopen Count: {{ section.reopen_count }}</li>
-                        <li>FC Failed Testing: {{ section.fc_failed }}</li>
-                        <li>QA Status: {{ section.qa_status }}</li>
-                        <li>QA Validated By: {{ section.pic_qa }}</li>
-                    </ul>
-                </td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">3</span>
+                        <span class="rca-section__name">Affected Module</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        {{ section.affected_module | safe }}
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-title">SOLUTION</td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">4</span>
+                        <span class="rca-section__name">Impact Analysis</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        {{ section.impact_analysis | safe }}
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-content">
-                    {{ section.solution | safe }}
-                </td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">5</span>
+                        <span class="rca-section__name">Quality Gate Findings</span>
+                    </div>
+                    <div class="rca-section__content">
+                        <div class="qa-metrics-grid">
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Quality Gate — First Pass</span>
+                                <span class="qa-metric__value">{{ section.quality_gate_pass }}</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Smoke Test — First Pass</span>
+                                <span class="qa-metric__value">{{ section.smoke_test_pass }}</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Reopen Count</span>
+                                <span class="qa-metric__value">{{ section.reopen_count }}</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">FC Failed Testing</span>
+                                <span class="qa-metric__value">{{ section.fc_failed }}</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">QA Status</span>
+                                <span class="qa-metric__value">{{ section.qa_status }}</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">QA Validated By</span>
+                                <span class="qa-metric__value">{{ section.pic_qa }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-title">PREVENTIVE ACTION</td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">6</span>
+                        <span class="rca-section__name">Corrective Action</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        {{ section.solution | safe }}
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-content">
-                    {{ section.preventive_action | safe }}
-                </td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">7</span>
+                        <span class="rca-section__name">Preventive Action</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        {{ section.preventive_action | safe }}
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-title">OWNER REVIEW</td>
-            </tr>
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">8</span>
+                        <span class="rca-section__name">Owner Review</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai rca-section__content--owner">
+                        {{ section.owner_review | safe }}
+                    </div>
+                </section>
 
-            <tr>
-                <td class="section-content">
-                    {{ section.owner_review | safe }}
-                </td>
-            </tr>
-        </tbody>
-    </table>
-
-    {% if section.attachments %}
-        <div class="attachments-heading">Attachments</div>
-
-        {% for attachment in section.attachments %}
-            <div class="attachment-wrapper">
-                <img src="{{ attachment }}" class="attachment-img" alt="Attachment">
             </div>
-        {% endfor %}
-    {% endif %}
+        </div>
 
-    {% if section.approval %}
-        <div class="approval-heading">Approval Sign-off</div>
+        <!-- ============================================================
+             ATTACHMENTS BLOCK
+             section.attachments items are dicts produced by
+             resolve_attachment() in test.py:
+                 { "name": str, "uri": str | None, "is_image": bool }
+             - If uri is None, the file was not found on disk -> show
+               a "not found" notice instead of a broken image/link.
+             - If is_image is True, render an <img>.
+             - Otherwise (pdf, xlsx, etc.), render a clickable link to
+               the file:// URI so it can still be opened from the PDF.
+        ============================================================ -->
+        <div class="attachments-block">
+            <h3 class="attachments-block__heading">Attachments</h3>
 
-        <table class="approval-table">
-            <tbody>
-                <tr>
-                    <td class="approval-label">Prepared By</td>
-                    <td class="approval-value">{{ section.approval.prepared_by if section.approval.prepared_by else "" }}</td>
-                </tr>
-                <tr>
-                    <td class="approval-label">Reviewed By Developer</td>
-                    <td class="approval-value">{{ section.approval.reviewed_by_dev if section.approval.reviewed_by_dev else "" }}</td>
-                </tr>
-                <tr>
-                    <td class="approval-label">Validated By QA</td>
-                    <td class="approval-value">{{ section.approval.validated_by_qa if section.approval.validated_by_qa else "" }}</td>
-                </tr>
-                <tr>
-                    <td class="approval-label">Approved By Owner</td>
-                    <td class="approval-value">{{ section.approval.approved_by_owner if section.approval.approved_by_owner else "" }}</td>
-                </tr>
-            </tbody>
-        </table>
-    {% endif %}
+            {% if section.attachments %}
+                {% for attachment in section.attachments %}
+                    {% if attachment.uri %}
+                        <figure class="attachment-figure">
+                            {% if attachment.is_image %}
+                                <img src="{{ attachment.uri }}" class="attachment-img" alt="{{ attachment.name }}">
+                            {% else %}
+                                <p class="rca-section__description">
+                                    <a href="{{ attachment.uri }}" target="_blank" rel="noopener">{{ attachment.name }}</a>
+                                </p>
+                            {% endif %}
+                            <figcaption class="attachment-caption">{{ attachment.name }}</figcaption>
+                        </figure>
+                    {% else %}
+                        <p class="section-unavailable">Attachment not found: {{ attachment.name }}</p>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <p class="section-unavailable">No attachments provided for this issue.</p>
+            {% endif %}
+        </div>
 
-    {% if not loop.last %}
-        <div class="section-divider"></div>
-    {% endif %}
+        {% if section.approval %}
+        <div class="approval-block">
+            <h3 class="approval-block__heading">Approval Sign-off</h3>
+
+            <table class="approval-table" aria-label="Approval sign-off">
+                <thead>
+                    <tr>
+                        <th class="approval-table__role-col">Role</th>
+                        <th class="approval-table__name-col">Name</th>
+                        <th class="approval-table__sig-col">Signature / Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="approval-label">Prepared By</td>
+                        <td class="approval-value">{{ section.approval.prepared_by or "" }}</td>
+                        <td class="approval-sig"></td>
+                    </tr>
+                    <tr>
+                        <td class="approval-label">Reviewed By Developer</td>
+                        <td class="approval-value">{{ section.approval.reviewed_by_dev or "" }}</td>
+                        <td class="approval-sig"></td>
+                    </tr>
+                    <tr>
+                        <td class="approval-label">Validated By QA</td>
+                        <td class="approval-value">{{ section.approval.validated_by_qa or "" }}</td>
+                        <td class="approval-sig"></td>
+                    </tr>
+                    <tr>
+                        <td class="approval-label">Approved By Owner</td>
+                        <td class="approval-value">{{ section.approval.approved_by_owner or "" }}</td>
+                        <td class="approval-sig"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+    </article>
 
     {% endfor %}
 
-    <footer class="document-footer">
-        <div>Generated by RCA Generator</div>
-        <div>Generated Date: {{ generated_date }}</div>
-        <div>Document ID: RCA-{{ task.issue_logs_id }}</div>
+    <footer class="document-footer" role="contentinfo">
+        <div class="document-footer__brand">
+            Generated by RCA Generator — direc Business Technologies Inc.
+        </div>
+        <div class="document-footer__meta">
+            <span>Generated: {{ generated_date }}</span>
+            <span class="document-footer__sep">|</span>
+            <span>Document ID: RCA-{{ task.issue_logs_id }}</span>
+        </div>
     </footer>
 
 </div>
+
 </body>
 </html>
