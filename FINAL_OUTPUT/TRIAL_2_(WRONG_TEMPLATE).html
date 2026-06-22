@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Cause Analysis — PRESENTATION</title>
+    <link rel="stylesheet" href="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/rca.css">
+</head>
+
+<body>
+
+<div class="header" role="banner" aria-label="Document header">
+    <div class="page-header-logo">
+        <img src="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/images/direc_logo.png" class="logo" alt="direc Business Technologies Inc. logo">
+    </div>
+
+    <div class="page-header-details">
+        <div class="detail-row">
+            <span class="detail-text">4F. Victoria One Bldg. 1670 Quezon Ave.</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">South Triangle, Quezon City, Philippines.</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">www.direcbusiness.com</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">(02) 8555 1547</span>
+        </div>
+    </div>
+</div>
+
+<div class="page">
+
+    <h1 class="main-title">Root Cause Analysis (RCA)</h1>
+
+    <table class="info-table" aria-label="Document information">
+        <tbody>
+            <tr>
+                <td class="label"><strong>Company Name:</strong></td>
+                <td class="value bold"><strong>AMC</strong></td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Purpose:</strong></td>
+                <td class="value">Root Cause Analysis (RCA)</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Date:</strong></td>
+                <td class="value">June 18, 2026</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Issue ID:</strong></td>
+                <td class="value">PRESENTATION</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Issue:</strong></td>
+                <td class="value">
+                    
+                        Approval Flow does not Take Effect if Updated
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Assigned Consultant:</strong></td>
+                <td class="value">Jomar Talambayan</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Approval Status:</strong></td>
+                <td class="value">
+                    <span class="approval-badge approval-badge--pending">
+                        Draft
+                    </span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    
+
+    
+
+    <article class="issue-article" aria-label="Issue 1: Approval Flow does not Take Effect if Updated">
+
+        <div class="issue-header-block">
+            <div class="issue-eyebrow">Issue No. 1</div>
+            <div class="issue-title-text">Approval Flow does not Take Effect if Updated</div>
+        </div>
+
+        <div class="issue-meta-strip">
+            <span class="meta-pill">
+                <span class="meta-pill__label">Product</span>
+                <span class="meta-pill__value">Lotus</span>
+            </span>
+            <span class="meta-pill">
+                <span class="meta-pill__label">Module</span>
+                <span class="meta-pill__value">Disciplinary Action</span>
+            </span>
+            <span class="meta-pill">
+                <span class="meta-pill__label">Core Function</span>
+                <span class="meta-pill__value">NaveeWorkforce</span>
+            </span>
+        </div>
+
+        <div class="rca-card">
+
+            <div class="rca-card__header">Root Cause Analysis</div>
+
+            <div class="rca-card__body">
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§1</span>
+                        <span class="rca-section__name">Issue</span>
+                    </div>
+                    <div class="rca-section__content">
+                        <p class="rca-section__description">
+                            Approval flow does not take effect when the approval flow setup is updated after a Disciplinary Action record has already been created.
+                        </p>
+
+                        <div class="key-facts-grid">
+                            <div class="key-fact">
+                                <span class="key-fact__label">Product</span>
+                                <span class="key-fact__value">Lotus</span>
+                            </div>
+                            <div class="key-fact">
+                                <span class="key-fact__label">Module</span>
+                                <span class="key-fact__value">Disciplinary Action</span>
+                            </div>
+                            <div class="key-fact">
+                                <span class="key-fact__label">Core Function</span>
+                                <span class="key-fact__value">NaveeWorkforce</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§2</span>
+                        <span class="rca-section__name">Root Cause</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        The root cause of this issue was a fundamental flaw in how the system managed approval workflow configurations. Specifically, the approval workflow configuration was initialized only during record creation and was never refreshed when the Approval Flow Setup was subsequently updated. This meant that existing Disciplinary Action records continued to operate with outdated approval rules, even after the approval flow setup was changed. When an approver attempted to access such a record, the Approval API returned HTTP 500 (an internal server error) because the `approver_id` was missing from the request payload. Further investigation of server logs revealed a `NullReferenceException` (an error when a program tries to use an object that hasn't been created) in `ApprovalFlowService.GetCurrentApprover()` at line 142. This indicated that the `ApprovalFlowService` component failed to correctly retrieve the current approver due to the stale configuration, preventing the "Approve" and "Reject" buttons from being displayed correctly.
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§3</span>
+                        <span class="rca-section__name">Affected Module</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        The issue primarily affected the following components and modules:
+
+*   **Disciplinary Action** module: This is the primary module within the **NaveeWorkforce** core function where the outdated approval configurations prevented proper workflow execution.
+*   **ApprovalFlowService**: This specific service component was directly impacted, particularly the `ApprovalFlowService.GetCurrentApprover()` method at `line 142`, which failed due to a `NullReferenceException` when attempting to retrieve approver information from stale configurations.
+*   **Approval Flow** system: The overall approval workflow configuration and its refresh mechanism were at fault, as the configuration was "initialized only during record creation" and "never refreshed when Approval Flow Setup is subsequently updated."
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§4</span>
+                        <span class="rca-section__name">Impact Analysis</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        Not specified.
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§5</span>
+                        <span class="rca-section__name">Quality Gate Findings</span>
+                    </div>
+                    <div class="rca-section__content">
+                        <div class="qa-metrics-grid">
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Quality Gate — First Pass</span>
+                                <span class="qa-metric__value">Passed</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Smoke Test — First Pass</span>
+                                <span class="qa-metric__value">Passed</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Reopen Count</span>
+                                <span class="qa-metric__value">0</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">FC Failed Testing</span>
+                                <span class="qa-metric__value">0</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">QA Status</span>
+                                <span class="qa-metric__value">Passed</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">QA Validated By</span>
+                                <span class="qa-metric__value">Joan Marie Piñeda</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§6</span>
+                        <span class="rca-section__name">Corrective Action</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        The corrective action implemented addresses the issue where approval flows were not taking effect after updates. Specifically, approval flow refresh logic was added to the `ApprovalFlowService`. This technical change ensures that existing Disciplinary Action records now reload the latest approval configuration on access when a setup change is detected. This means that if an approval workflow configuration is updated, any existing Disciplinary Action records will correctly reflect the new approval steps, rather than using outdated settings. The fix was verified by QA, who confirmed that the Approve and Reject buttons are now displayed correctly for existing Disciplinary Action records after an Approval Flow Setup update. The changes were implemented by Developer Jomar Talambayan and can be reviewed in Pull Request https://github.com/TechIgnite-Business-Solutions-Inc/rnd-rca-gen/pull/1 on the `fix/approval-flow-refresh` branch.
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§7</span>
+                        <span class="rca-section__name">Preventive Action</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        Not specified.
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">§8</span>
+                        <span class="rca-section__name">Owner Review</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai rca-section__content--owner">
+                        Reviewed by the module owner.
+                    </div>
+                </section>
+
+            </div>
+        </div>
+
+        
+
+        
+
+    </article>
+
+    
+
+    <footer class="document-footer" role="contentinfo">
+        <div class="document-footer__brand">
+            Generated by RCA Generator — direc Business Technologies Inc.
+        </div>
+        <div class="document-footer__meta">
+            <span>Generated: June 18, 2026</span>
+            <span class="document-footer__sep">|</span>
+            <span>Document ID: RCA-PRESENTATION</span>
+        </div>
+    </footer>
+
+</div>
+
+</body>
+</html>

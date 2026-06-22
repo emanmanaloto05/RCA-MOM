@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Cause Analysis — EIL_PRESENT_FINAL_FINAL</title>
+    <link rel="stylesheet" href="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/rca.css">
+</head>
+
+<body>
+
+<div class="header" role="banner" aria-label="Document header">
+    <div class="page-header-logo">
+        <img src="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/images/direc_logo.png" class="logo" alt="direc Business Technologies Inc. logo">
+    </div>
+
+    <div class="page-header-details">
+        <div class="detail-row">
+            <span class="detail-text">4F. Victoria One Bldg. 1670 Quezon Ave.</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">South Triangle, Quezon City, Philippines.</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">www.direcbusiness.com</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-text">(02) 8555 1547</span>
+        </div>
+    </div>
+</div>
+
+<div class="page">
+
+    <h1 class="main-title">Root Cause Analysis (RCA)</h1>
+
+    <table class="info-table" aria-label="Document information">
+        <tbody>
+            <tr>
+                <td class="label"><strong>Company Name:</strong></td>
+                <td class="value bold"><strong>AMC</strong></td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Purpose:</strong></td>
+                <td class="value">Root Cause Analysis (RCA)</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Date:</strong></td>
+                <td class="value">June 19, 2026</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Issue ID:</strong></td>
+                <td class="value">EIL_PRESENT_FINAL_FINAL</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Issue:</strong></td>
+                <td class="value">
+                    
+                        Approval Flow does not Take Effect if Updated
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Assigned Consultant:</strong></td>
+                <td class="value">Jomar Talambayan</td>
+            </tr>
+            <tr>
+                <td class="label"><strong>Approval Status:</strong></td>
+                <td class="value">
+                    <span class="approval-badge approval-badge--pending">
+                        Draft
+                    </span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    
+
+    
+
+    <article class="issue-article" aria-label="Issue 1: Approval Flow does not Take Effect if Updated">
+
+        <div class="issue-header-block">
+            <div class="issue-eyebrow">Issue No. 1</div>
+            <div class="issue-title-text">Approval Flow does not Take Effect if Updated</div>
+        </div>
+
+        <div class="issue-meta-strip">
+            <span class="meta-pill">
+                <span class="meta-pill__label">Product</span>
+                <span class="meta-pill__value">Lotus</span>
+            </span>
+            <span class="meta-pill">
+                <span class="meta-pill__label">Module</span>
+                <span class="meta-pill__value">Disciplinary Action</span>
+            </span>
+            <span class="meta-pill">
+                <span class="meta-pill__label">Core Function</span>
+                <span class="meta-pill__value">NaveeWorkforce</span>
+            </span>
+        </div>
+
+        <div class="rca-card">
+
+            <div class="rca-card__header">Root Cause Analysis</div>
+
+            <div class="rca-card__body">
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">1</span>
+                        <span class="rca-section__name">Issue</span>
+                    </div>
+                    <div class="rca-section__content">
+                        <p class="rca-section__description">
+                            Approval flow does not take effect when the approval flow setup is updated after a Disciplinary Action record has already been created. This blocks all approvers assigned under AMC&#39;s Disciplinary Action workflow from seeing the Approve and Reject buttons on existing DA records whenever HR updates the approval flow configuration, forcing approvers to either escalate manually outside the system or wait for unresolved disciplinary cases to pile up. Because disciplinary actions are time-sensitive and often tied to compliance and audit deadlines, every day a DA record sits unapproved increases AMC&#39;s exposure to missed disciplinary timelines and potential labor-compliance findings during HR audits.
+                        </p>
+
+                        <div class="key-facts-grid">
+                            <div class="key-fact">
+                                <span class="key-fact__label">Product</span>
+                                <span class="key-fact__value">Lotus</span>
+                            </div>
+                            <div class="key-fact">
+                                <span class="key-fact__label">Module</span>
+                                <span class="key-fact__value">Disciplinary Action</span>
+                            </div>
+                            <div class="key-fact">
+                                <span class="key-fact__label">Core Function</span>
+                                <span class="key-fact__value">NaveeWorkforce</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">2</span>
+                        <span class="rca-section__name">Root Cause</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        <p>Generation unavailable due to temporary AI provider limitations. Please retry the request or contact support if this persists.</p>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">3</span>
+                        <span class="rca-section__name">Affected Module</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        <p>The defect primarily affected the following modules and components:</p>
+<ul>
+<li><strong>Disciplinary Action Module</strong>: This is the core module within the Lotus product (part of the NaveeWorkforce core function) where the approval workflow configuration was not being refreshed for existing records.</li>
+<li><strong>ApprovalFlowService</strong>: This specific service was responsible for managing and retrieving approval configurations. The defect manifested as a <code>NullReferenceException</code> in the <code>ApprovalFlowService.GetCurrentApprover()</code> method at line 142, indicating a failure to correctly fetch approver details when the approval flow setup had been updated.</li>
+<li><strong>Approval Flow System</strong>: The broader approval flow configuration and its integration with the Disciplinary Action module were impacted, as the system failed to re-fetch the latest active approval configuration.</li>
+<li><strong>Approval API</strong>: This API returned an HTTP 500 error when attempting to process approval requests for affected records, specifically when the <code>approver_id</code> was missing from the request payload due to the underlying configuration issue.</li>
+</ul>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">4</span>
+                        <span class="rca-section__name">Impact Analysis</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        <p>Not specified.</p>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">5</span>
+                        <span class="rca-section__name">Quality Gate Findings</span>
+                    </div>
+                    <div class="rca-section__content">
+                        <div class="qa-metrics-grid">
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Quality Gate — First Pass</span>
+                                <span class="qa-metric__value">Passed</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Smoke Test — First Pass</span>
+                                <span class="qa-metric__value">Passed</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">Reopen Count</span>
+                                <span class="qa-metric__value">0</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">FC Failed Testing</span>
+                                <span class="qa-metric__value">0</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">QA Status</span>
+                                <span class="qa-metric__value">Passed</span>
+                            </div>
+                            <div class="qa-metric">
+                                <span class="qa-metric__label">QA Validated By</span>
+                                <span class="qa-metric__value">Joan Marie Piñeda</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">6</span>
+                        <span class="rca-section__name">Corrective Action</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        <p>Generation unavailable due to temporary AI provider limitations. Please retry the request or contact support if this persists.</p>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">7</span>
+                        <span class="rca-section__name">Preventive Action</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai">
+                        <p>Not specified.</p>
+                    </div>
+                </section>
+
+                <section class="rca-section">
+                    <div class="rca-section__title-row">
+                        <span class="rca-section__number">8</span>
+                        <span class="rca-section__name">Owner Review</span>
+                    </div>
+                    <div class="rca-section__content rca-section__content--ai rca-section__content--owner">
+                        <p>Reviewed by the module owner.</p>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+
+        <!-- ============================================================
+             ATTACHMENTS BLOCK
+             section.attachments items are dicts produced by
+             resolve_attachment() in test.py:
+                 { "name": str, "uri": str | None, "is_image": bool }
+             - If uri is None, the file was not found on disk -> show
+               a "not found" notice instead of a broken image/link.
+             - If is_image is True, render an <img>.
+             - Otherwise (pdf, xlsx, etc.), render a clickable link to
+               the file:// URI so it can still be opened from the PDF.
+        ============================================================ -->
+        <div class="attachments-block">
+            <h3 class="attachments-block__heading">Attachments</h3>
+
+            
+                
+                    
+                        <figure class="attachment-figure">
+                            
+                                <img src="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/images/sample1.png" class="attachment-img" alt="sample1.png">
+                            
+                            <figcaption class="attachment-caption">sample1.png</figcaption>
+                        </figure>
+                    
+                
+                    
+                        <figure class="attachment-figure">
+                            
+                                <img src="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/images/sample2.png" class="attachment-img" alt="sample2.png">
+                            
+                            <figcaption class="attachment-caption">sample2.png</figcaption>
+                        </figure>
+                    
+                
+                    
+                        <figure class="attachment-figure">
+                            
+                                <img src="file:///C:/Users/Jane%20Gaela/Desktop/rnd_rca_gen/static/images/sample3.png" class="attachment-img" alt="sample3.png">
+                            
+                            <figcaption class="attachment-caption">sample3.png</figcaption>
+                        </figure>
+                    
+                
+            
+        </div>
+
+        
+
+    </article>
+
+    
+
+    <footer class="document-footer" role="contentinfo">
+        <div class="document-footer__brand">
+            Generated by RCA Generator — direc Business Technologies Inc.
+        </div>
+        <div class="document-footer__meta">
+            <span>Generated: June 19, 2026</span>
+            <span class="document-footer__sep">|</span>
+            <span>Document ID: RCA-EIL_PRESENT_FINAL_FINAL</span>
+        </div>
+    </footer>
+
+</div>
+
+</body>
+</html>
